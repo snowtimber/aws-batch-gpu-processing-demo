@@ -613,7 +613,31 @@ Outputs:
   SubmitCpuJobCommand:
     Description: Command to submit a CPU job
     Value: !Sub "aws batch submit-job --job-name cpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue ${CPUJobQueue} --job-definition ${CPUImageProcessingJobDefinition}"
-    
+
+  ListRunningGpuJobsCommand:
+    Description: Command to list running GPU jobs
+    Value: !Sub "aws batch list-jobs --job-queue ${GpuJobQueue} --job-status RUNNING"
+
+  ListRunningCpuJobsCommand:
+    Description: Command to list running CPU jobs
+    Value: !Sub "aws batch list-jobs --job-queue ${CPUJobQueue} --job-status RUNNING"
+
+  DescribeJobsCommand:
+    Description: Command to describe specific jobs (replace job-id-1 with actual job IDs)
+    Value: "aws batch describe-jobs --jobs job-id-1 job-id-2"
+
+  GetGpuJobLogsCommand:
+    Description: Command to get logs for a GPU job (replace job-id with actual ID)
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM"
+
+  GetCpuJobLogsCommand:
+    Description: Command to get logs for a CPU job (replace job-id with actual ID)
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM"
+
+  GetBenchmarkResultsCommand:
+    Description: Command to extract just the benchmark timing results (replace job-id with actual ID)
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM --output text | grep -E 'multiplication|Batch size|Operation'"
+
   VpcId:
     Description: ID of the VPC created for the Batch environment
     Value: !Ref BatchVPC
