@@ -104,15 +104,13 @@ Examples:
 
 For the GPU benchmark:
 ```bash
-aws batch submit-job --job-name gpu-benchmark-\$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/GpuJobQueue-ah5wLDDJK0Vxglfh --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/gpu-image-processing-benchmark:2
+aws batch submit-job --job-name gpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/GpuJobQueue-ah5wLDDJK0Vxglfh --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/gpu-image-processing-benchmark:2
 ```
 
 For the CPU benchmark:
 
 ```bash
-aws batch submit-job --job-name cpu-benchmark-\$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/CPUJobQueue-y0JUQtb8AbVVPVkn --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/cpu-image-processing-benchmark:1
-
-
+aws batch submit-job --job-name cpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/CPUJobQueue-y0JUQtb8AbVVPVkn --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/cpu-image-processing-benchmark:1
 ```
 
 ### 7. Monitor the job executions
