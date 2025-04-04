@@ -7,7 +7,7 @@ This repository contains an AWS SAM template that sets up GPU and CPU benchmarki
 
 The benchmark runs identical image processing operations on both GPU and CPU instances, allowing you to:
 
-1. Compare execution times between GPU and CPU
+1. Compare execution times between GPU and CPU on the same workloads
 2. Measure acceleration factors for different operations
 3. Evaluate cost-effectiveness of GPU vs CPU for image workloads
 4. Test scaling behavior with different batch and image sizes
@@ -64,114 +64,162 @@ aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0]
 
 Wait until the deployment status is `CREATE_COMPLETE`.
 
-### 5. Get the job submission commands
+### 5. Get the job submission commands directly from CloudFormation outputs
 
-Once the deployment is complete, retrieve the commands to submit benchmark jobs:
-
-```bash
-# Get the GPU job submission command
-aws cloudformation describe-stacks \
-  --stack-name gpu-benchmark \
-  --query "Stacks[0].Outputs[?OutputKey=='SubmitGpuJobCommand'].OutputValue" \
-  --output text
-
-# Get the CPU job submission command
-aws cloudformation describe-stacks \
-  --stack-name gpu-benchmark \
-  --query "Stacks[0].Outputs[?OutputKey=='SubmitCpuJobCommand'].OutputValue" \
-  --output text
-```
-
-### 6. Submit benchmark jobs
-
-Execute the commands from the previous step to submit both GPU and CPU benchmark jobs:
+Once the deployment is complete, you can retrieve the exact commands to run without any modification:
 
 ```bash
-# Submit GPU benchmark job
-aws batch submit-job \
-  --job-name gpu-benchmark-$(date +%Y%m%d%H%M%S) \
-  --job-queue <gpu-job-queue-arn> \
-  --job-definition <gpu-job-definition-arn>
+# Get and execute the GPU job submission command
+$(aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0].Outputs[?OutputKey=='SubmitGpuJobCommand'].OutputValue" --output text)
 
-# Submit CPU benchmark job
-aws batch submit-job \
-  --job-name cpu-benchmark-$(date +%Y%m%d%H%M%S) \
-  --job-queue <cpu-job-queue-arn> \
-  --job-definition <cpu-job-definition-arn>
+# Get and execute the CPU job submission command
+$(aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0].Outputs[?OutputKey=='SubmitCpuJobCommand'].OutputValue" --output text)
 ```
 
-Examples:
+These commands will automatically:
+1. Pull the correct job queue ARNs from your deployment
+2. Pull the correct job definition ARNs
+3. Generate unique job names with timestamps
+4. Submit the jobs to AWS Batch
 
-For the GPU benchmark:
-```bash
-aws batch submit-job --job-name gpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/GpuJobQueue-ah5wLDDJK0Vxglfh --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/gpu-image-processing-benchmark:2
+### 6. Track your job IDs
+
+When you submit the jobs, AWS Batch will return a response like this:
+
+```json
+{
+    "jobArn": "arn:aws:batch:region:account:job/job-id",
+    "jobName": "gpu-benchmark-20230808123456",
+    "jobId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+}
 ```
 
-For the CPU benchmark:
+Save these job IDs for the next steps.
 
-```bash
-aws batch submit-job --job-name cpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue arn:aws:batch:us-east-1:730335522976:job-queue/CPUJobQueue-y0JUQtb8AbVVPVkn --job-definition arn:aws:batch:us-east-1:730335522976:job-definition/cpu-image-processing-benchmark:1
-```
+### 7. Monitor job status
 
-### 7. Monitor the job executions
-
-You can monitor the job status using the AWS Batch console or via the CLI:
-
-```bash
-# List all jobs in the GPU queue
-aws batch list-jobs --job-queue <gpu-job-queue-arn> --status RUNNING
-
-# List all jobs in the CPU queue
-aws batch list-jobs --job-queue <cpu-job-queue-arn> --status RUNNING
-
-# Get details about a specific job
-aws batch describe-jobs --jobs <job-id>
-```
-
-### 8. View job logs
-
-Job logs are stored in CloudWatch Logs. You can view them in the CloudWatch console or via the CLI:
+You can track the status of your jobs using the job IDs:
 
 ```bash
-# Get the log stream name
-LOG_STREAM=$(aws batch describe-jobs --jobs <job-id> --query "jobs[0].container.logStreamName" --output text)
+# Check status of specific jobs
+aws batch describe-jobs --jobs job-id-1 job-id-2
 
-# View the logs
-aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM
+# List all GPU jobs with a specific status
+JOB_QUEUE=$(aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0].Outputs[?OutputKey=='GpuJobQueue'].OutputValue" --output text)
+aws batch list-jobs --job-queue $JOB_QUEUE --status RUNNING
+
+# List all CPU jobs with a specific status
+JOB_QUEUE=$(aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0].Outputs[?OutputKey=='CpuJobQueue'].OutputValue" --output text)
+aws batch list-jobs --job-queue $JOB_QUEUE --status RUNNING
 ```
 
-## Understanding the GPU and CPU Benchmarks
+Job status progression: SUBMITTED → PENDING → RUNNABLE → STARTING → RUNNING → SUCCEEDED (or FAILED)
 
-Both benchmarks perform the same operations with suitable adjustments for hardware capability:
+### 8. View job logs to see benchmark results
 
-### GPU Benchmark
+To view the logs and benchmark results:
 
-1. **Matrix Operations**: Tests 5000×5000 to 15000×15000 matrices
-2. **Image Processing**: Processes 4096×4096 and 8192×8192 images with batch sizes of 1, 4, and 8
-3. **Advanced Image Transformations**: Implements Gaussian blur and edge detection
+```bash
+# Get the log stream for a job
+LOG_STREAM=$(aws batch describe-jobs --jobs your-job-id --query "jobs[0].container.logStreamName" --output text)
 
-### CPU Benchmark
+# View the full log
+aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM --output text
 
-1. **Matrix Operations**: Tests 1000×1000 to 5000×5000 matrices (smaller due to CPU limitations)
-2. **Image Processing**: Processes 2048×2048 and 4096×4096 images with batch sizes of 1, 2, and 4
-3. **Advanced Image Transformations**: Implements the same Gaussian blur and edge detection on smaller images
+# Get just the benchmark results (helpful for large logs)
+aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM --output text | grep -E "multiplication|Batch size|Operation"
+```
 
-## Analyzing Results
+You can also view the logs in the AWS CloudWatch console for a more user-friendly experience.
 
-After running both benchmarks, you can compare:
+## Understanding the Benchmark Results
 
-1. **Raw Performance**: Compare execution times for similar operations
-2. **Speedup Factor**: Calculate GPU speedup = CPU time / GPU time
-3. **Cost Efficiency**: Calculate (CPU instance cost × CPU time) / (GPU instance cost × GPU time)
+Both the GPU and CPU benchmarks run the same operations on the same image sizes for direct comparison, including:
 
-For most image processing operations, you should typically see:
-- 10-100× speedup for matrix operations
-- 5-30× speedup for convolutional operations
-- 3-20× speedup for complex transformations
+1. **Matrix Operations**: Both perform operations on matrices sized 1000×1000, 2000×2000, and 5000×5000
+2. **Image Processing**: Both process images sized 2048×2048 and 4096×4096 with various batch sizes
+3. **Advanced Image Transformations**: Both apply identical Gaussian blur and edge detection operations
+
+> **Note**: While the benchmarks use the same algorithms and image sizes, be aware that the CPU benchmark may time out on very large workloads. If this happens, examine the partial results and estimate completion time based on the operations that did complete.
+
+### Analyzing Results Format
+
+The benchmarks output execution times for each operation. Here's a sample output structure:
+
+```
+=== [GPU/CPU] Benchmark for Image Processing ===
+[Device information]
+
+=== 1. Running Matrix Operations Benchmark ===
+Matrix multiplication 1000x1000: X.XX seconds
+Matrix multiplication 2000x2000: X.XX seconds
+Matrix multiplication 5000x5000: X.XX seconds
+
+=== 2. Running Image Processing Benchmark ===
+
+Processing images of size 2048x2048
+Batch size 1: X.XX seconds
+Batch size 2: X.XX seconds
+Batch size 4: X.XX seconds
+
+Processing images of size 4096x4096
+Batch size 1: X.XX seconds
+Batch size 2: X.XX seconds
+Batch size 4: X.XX seconds
+
+=== 3. Running Advanced Image Transformations ===
+
+Advanced Operations Timing:
+Gaussian Blur: X.XX seconds
+Edge Detection: X.XX seconds
+```
+
+## Analyzing and Comparing Results
+
+After both benchmarks complete, use these guidelines to compare performance:
+
+1. **Direct Like-for-Like Comparison**:
+   - Compare execution times for identical operations (same image/matrix sizes)
+   - Calculate speedup factor: CPU time / GPU time for each operation
+
+2. **Scaling Analysis**:
+   - How does processing time increase as image size grows? (2048×2048 → 4096×4096)
+   - How does processing time increase as batch size grows? (1 → 2 → 4)
+   - Does GPU show better scaling characteristics than CPU?
+
+3. **Cost Efficiency Analysis**:
+   - Get the instance hourly rates from AWS pricing
+   - Calculate: (CPU instance price × CPU time) / (GPU instance price × GPU time)
+   - If result > 1: GPU is more cost-efficient
+   - If result < 1: CPU is more cost-efficient
+
+4. **Operation-Specific Performance**:
+   - Do certain operations benefit more from GPU acceleration?
+   - Which operations show the highest speedup factors?
+
+## Creating Performance Comparison Tables
+
+After running the benchmarks, create comparison tables like these:
+
+### Matrix Multiplication Performance
+
+| Matrix Size | GPU Time (s) | CPU Time (s) | Speedup Factor | Cost Efficiency Ratio |
+|-------------|--------------|--------------|----------------|------------------------|
+| 1000x1000   | ___ s        | ___ s        | ___x           | ___                    |
+| 2000x2000   | ___ s        | ___ s        | ___x           | ___                    |
+| 5000x5000   | ___ s        | ___ s        | ___x           | ___                    |
+
+### Image Processing Performance (4096x4096)
+
+| Batch Size | GPU Time (s) | CPU Time (s) | Speedup Factor | Cost Efficiency Ratio |
+|------------|--------------|--------------|----------------|------------------------|
+| 1          | ___ s        | ___ s        | ___x           | ___                    |
+| 2          | ___ s        | ___ s        | ___x           | ___                    |
+| 4          | ___ s        | ___ s        | ___x           | ___                    |
 
 ## Cleaning Up
 
-To delete all resources created by this template:
+To avoid ongoing charges, delete all resources:
 
 ```bash
 aws cloudformation delete-stack --stack-name gpu-benchmark
@@ -181,58 +229,51 @@ This will delete all resources including VPC, IAM roles, and AWS Batch resources
 
 ## Troubleshooting
 
-### Instance Launch Issues
+### Compute Environment Issues
 
-If instances fail to launch:
+If the compute environment shows "INVALID" status:
 
-1. Check your service quotas for GPU instance types
-2. Verify that the AMI ID is valid for your region
-3. Check the AWS Batch event logs for specific error messages:
+```bash
+# Check compute environment status
+ENV=$(aws cloudformation describe-stacks --stack-name gpu-benchmark --query "Stacks[0].Outputs[?OutputKey=='GpuComputeEnvironment'].OutputValue" --output text 2>/dev/null || echo "Not found")
+aws batch describe-compute-environments --compute-environments $ENV
+```
+
+Common issues:
+- Insufficient service quota for GPU instances
+- AMI not available in your region
+- User data script formatting issues
+
+### Job Submission Failures
+
+If jobs fail to submit or get stuck in RUNNABLE state:
+
+1. Check if compute environment is scaling up correctly:
    ```bash
-   aws batch describe-compute-environments --compute-environments <compute-env-arn> --query "computeEnvironments[0].status"
+   aws batch describe-compute-environments --compute-environments $ENV --query "computeEnvironments[0].status"
    ```
 
-### Job Failure Issues
-
-If jobs fail to complete:
-
-1. Check CloudWatch Logs for error messages
-2. For GPU jobs, verify that the NVIDIA drivers are properly installed (look for `nvidia-smi` output in the logs)
-3. Ensure the container has access to the GPU device
-
-### Resource Limitations
-
-If you encounter resource limitations:
-
-1. Reduce the `MaxvCpus` parameter in the template
-2. Choose smaller instance types
-3. Request quota increases for your AWS account
-
-## Understanding the Internet Gateway
-
-The Internet Gateway (IGW) in the template is essential for:
-
-1. **Package Downloads**: Enabling EC2 instances to download packages via `apt-get` and `pip`
-2. **Container Image Pulls**: Allowing instances to pull Docker images from public repositories
-3. **AWS Service Communication**: Facilitating communication with CloudWatch Logs and other AWS services
-
-Without the IGW, the compute instances would not be able to access the internet to download necessary dependencies or stream logs to CloudWatch.
-
-## Performance Evaluation Framework
-
-To properly evaluate if GPU acceleration is beneficial for your specific workload, consider:
-
-1. **Execution Time**: Raw processing time reduction
-2. **Instance Cost**: Hourly cost difference between GPU and CPU instances
-3. **Cost Efficiency Ratio**: Calculate using the formula:
+2. Verify your instance quota is sufficient:
+   ```bash
+   aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
    ```
-   Efficiency = (CPU price × CPU time) / (GPU price × GPU time)
-   ```
-   - If > 1: GPU is more cost-efficient
-   - If < 1: CPU is more cost-efficient
 
-4. **Scaling Properties**: How performance changes with increasing problem size
-   - If speedup increases with problem size, GPUs become more cost-effective for larger workloads
+3. Check CloudWatch logs for Docker errors:
+   ```bash
+   aws logs describe-log-streams --log-group-name /aws/batch/gpu-benchmark
+   ```
+
+### CPU Job Timeouts
+
+If CPU jobs time out on larger workloads:
+
+1. Consider modifying the CPU job definition to increase the timeout:
+   ```bash
+   aws batch update-job-definition --job-definition cpu-image-processing-benchmark \
+       --timeout attemptDurationSeconds=43200  # 12 hours
+   ```
+
+2. Alternatively, modify the benchmark script to reduce problem sizes for your specific use case
 
 ## Additional Resources
 
