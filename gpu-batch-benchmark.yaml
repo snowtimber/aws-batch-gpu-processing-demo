@@ -11,12 +11,12 @@ Parameters:
     
   InstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.xlarge,g5.xlarge
+    Default: g4dn.xlarge,g4dn.2xlarge,g5.xlarge
     Description: List of GPU instance types to use for the compute environment
 
   CPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: c5.2xlarge,c5n.2xlarge,m5.2xlarge
+    Default: c5.4xlarge,c5n.4xlarge,m5.4xlarge
     Description: List of CPU instance types to use for the CPU compute environment
 
 Resources:
@@ -289,6 +289,7 @@ Resources:
             import torch
             import cv2
             import os
+            import gc
             
             def benchmark_gpu():
                 print("=== GPU Benchmark for Image Processing ===")
@@ -303,6 +304,10 @@ Resources:
                     print("\n=== 1. Running Matrix Operations Benchmark ===")
                     sizes = [1000, 2000, 5000]
                     for size in sizes:
+                        # Clear GPU memory before each test
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                        
                         start = time.time()
                         
                         # Create large tensors on GPU
@@ -315,6 +320,11 @@ Resources:
                         
                         end = time.time()
                         print(f"Matrix multiplication {size}x{size}: {end - start:.2f} seconds")
+                        
+                        # Free memory
+                        del a, b, c
+                        torch.cuda.empty_cache()
+                        gc.collect()
                     
                     # 2. Image Processing Benchmark
                     print("\n=== 2. Running Image Processing Benchmark ===")
@@ -327,6 +337,10 @@ Resources:
                         img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
                         
                         for batch_size in batch_sizes:
+                            # Clear GPU memory before each test
+                            torch.cuda.empty_cache()
+                            gc.collect()
+                            
                             # Convert to torch tensor on GPU
                             start = time.time()
                             img_tensor = torch.from_numpy(img).permute(2, 0, 1).float().cuda() / 255.0
@@ -363,11 +377,21 @@ Resources:
                             
                             end = time.time()
                             print(f"Batch size {batch_size}: {end - start:.2f} seconds")
+                            
+                            # Free memory
+                            del img_tensor, batch, out, conv1, conv2, conv3, bn
+                            torch.cuda.empty_cache()
+                            gc.collect()
                     
                     # 3. Advanced Image Transformations
                     print("\n=== 3. Running Advanced Image Transformations ===")
                     img_size = 2048
                     img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
+                    
+                    # Clear GPU memory before test
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    
                     img_tensor = torch.from_numpy(img).permute(2, 0, 1).float().cuda() / 255.0
                     
                     # Record execution times for various operations
@@ -410,6 +434,10 @@ Resources:
                     for op, time_taken in operations.items():
                         print(f"{op}: {time_taken:.2f} seconds")
                     
+                    # Free memory
+                    del img_tensor, kernel, padded, blurred, sobel_x, sobel_y, g_x, g_y, edges
+                    torch.cuda.empty_cache()
+                    
                     print("\n=== GPU Benchmark Complete ===")
                 else:
                     print("CUDA is not available. Cannot run GPU benchmark.")
@@ -421,7 +449,7 @@ Resources:
             # Run the benchmark
             python3 /tmp/benchmark.py
         Vcpus: 8
-        Memory: 16384
+        Memory: 32768  # Increased from 16GB to 32GB
         ResourceRequirements:
           - Type: GPU
             Value: "1"
@@ -460,6 +488,7 @@ Resources:
             import torch
             import cv2
             import os
+            import gc
             
             def benchmark_cpu():
                 print("=== CPU Benchmark for Image Processing ===")
@@ -474,6 +503,9 @@ Resources:
                 print("\n=== 1. Running Matrix Operations Benchmark ===")
                 sizes = [1000, 2000, 5000]  # Same sizes as GPU benchmark
                 for size in sizes:
+                    # Clear memory before each test
+                    gc.collect()
+                    
                     start = time.time()
                     
                     # Create large tensors on CPU
@@ -485,11 +517,16 @@ Resources:
                     
                     end = time.time()
                     print(f"Matrix multiplication {size}x{size}: {end - start:.2f} seconds")
+                    
+                    # Free memory
+                    del a, b, c
+                    gc.collect()
                 
                 # 2. Image Processing Benchmark
                 print("\n=== 2. Running Image Processing Benchmark ===")
-                img_sizes = [2048, 4096]  # Same sizes as GPU benchmark
-                batch_sizes = [1, 2, 4]  # Same batch sizes as GPU benchmark
+                # Use smaller sizes for CPU to avoid OOM
+                img_sizes = [1024, 2048]  # Reduced from [2048, 4096]
+                batch_sizes = [1, 2, 4]
                 
                 for img_size in img_sizes:
                     print(f"\nProcessing images of size {img_size}x{img_size}")
@@ -497,6 +534,9 @@ Resources:
                     img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
                     
                     for batch_size in batch_sizes:
+                        # Clear memory before each test
+                        gc.collect()
+                        
                         # Convert to torch tensor on CPU
                         start = time.time()
                         img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
@@ -531,6 +571,41 @@ Resources:
                         
                         end = time.time()
                         print(f"Batch size {batch_size}: {end - start:.2f} seconds")
+                        
+                        # Free memory
+                        del img_tensor, batch, out, conv1, conv2, conv3, bn
+                        gc.collect()
+                
+                # Try to run 4096 size with batch size 1 only if we have enough memory
+                try:
+                    print("\nAttempting larger image: 4096x4096")
+                    img_size = 4096
+                    img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
+                    
+                    # Clear memory
+                    gc.collect()
+                    
+                    # Convert to torch tensor on CPU
+                    start = time.time()
+                    img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+                    
+                    # Process single image (batch size 1)
+                    batch = img_tensor.unsqueeze(0)
+                    
+                    # Image processing operations
+                    conv1 = torch.nn.Conv2d(3, 16, kernel_size=3, padding=1)
+                    out = conv1(batch)
+                    out = torch.nn.functional.relu(out)
+                    out = torch.nn.functional.max_pool2d(out, 2)
+                    
+                    end = time.time()
+                    print(f"4096x4096 image, batch size 1: {end - start:.2f} seconds")
+                    
+                    # Free memory
+                    del img, img_tensor, batch, out, conv1
+                    gc.collect()
+                except RuntimeError as e:
+                    print(f"Could not process 4096x4096 image: {e}")
                 
                 # 3. Advanced Image Transformations
                 print("\n=== 3. Running Advanced Image Transformations ===")
@@ -587,7 +662,7 @@ Resources:
             # Run the benchmark
             python3 /tmp/benchmark.py
         Vcpus: 8
-        Memory: 16384
+        Memory: 49152  # Increased to 48GB
         JobRoleArn: !GetAtt JobRole.Arn
 
   # CloudWatch Logs Group
