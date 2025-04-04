@@ -9,7 +9,7 @@ Parameters:
     Default: 64
     Description: Maximum vCPUs for the compute environment
     
-  InstanceTypes:
+  GPUInstanceTypes:
     Type: CommaDelimitedList
     Default: g4dn.2xlarge,g4dn.4xlarge,g5.2xlarge
     Description: List of GPU instance types with at least 32GB memory
@@ -207,7 +207,7 @@ Resources:
         MaxvCpus: !Ref MaxvCpus
         MinvCpus: 0
         DesiredvCpus: 0
-        InstanceTypes: !Ref InstanceTypes
+        InstanceTypes: !Ref GPUInstanceTypes
         Subnets: 
           - !Ref PublicSubnet1
           - !Ref PublicSubnet2
