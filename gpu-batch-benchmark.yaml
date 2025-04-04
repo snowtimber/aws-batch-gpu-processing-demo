@@ -11,13 +11,13 @@ Parameters:
     
   InstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.xlarge,g4dn.2xlarge,g5.xlarge
-    Description: List of GPU instance types to use for the compute environment
+    Default: g4dn.2xlarge,g4dn.4xlarge,g5.2xlarge
+    Description: List of GPU instance types with at least 32GB memory
 
   CPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: c5.4xlarge,c5n.4xlarge,m5.4xlarge
-    Description: List of CPU instance types to use for the CPU compute environment
+    Default: r5.2xlarge,r5.4xlarge,m5.4xlarge,c5.9xlarge
+    Description: List of CPU instance types with at least 32GB memory
 
 Resources:
   # IAM Roles
@@ -448,8 +448,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 8
-        Memory: 32768  # Increased from 16GB to 32GB
+        Vcpus: 8              # Set for g4dn.2xlarge (8 vCPUs)
+        Memory: 30720         # ~30GB for working memory (g4dn.2xlarge has 32GB total)
         ResourceRequirements:
           - Type: GPU
             Value: "1"
@@ -524,9 +524,9 @@ Resources:
                 
                 # 2. Image Processing Benchmark
                 print("\n=== 2. Running Image Processing Benchmark ===")
-                # Use smaller sizes for CPU to avoid OOM
-                img_sizes = [1024, 2048]  # Reduced from [2048, 4096]
-                batch_sizes = [1, 2, 4]
+                # Now we can use the same sizes as GPU since we have more memory
+                img_sizes = [2048, 4096]  # Same as GPU benchmark
+                batch_sizes = [1, 2, 4]   # Same as GPU benchmark
                 
                 for img_size in img_sizes:
                     print(f"\nProcessing images of size {img_size}x{img_size}")
@@ -575,37 +575,6 @@ Resources:
                         # Free memory
                         del img_tensor, batch, out, conv1, conv2, conv3, bn
                         gc.collect()
-                
-                # Try to run 4096 size with batch size 1 only if we have enough memory
-                try:
-                    print("\nAttempting larger image: 4096x4096")
-                    img_size = 4096
-                    img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
-                    
-                    # Clear memory
-                    gc.collect()
-                    
-                    # Convert to torch tensor on CPU
-                    start = time.time()
-                    img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
-                    
-                    # Process single image (batch size 1)
-                    batch = img_tensor.unsqueeze(0)
-                    
-                    # Image processing operations
-                    conv1 = torch.nn.Conv2d(3, 16, kernel_size=3, padding=1)
-                    out = conv1(batch)
-                    out = torch.nn.functional.relu(out)
-                    out = torch.nn.functional.max_pool2d(out, 2)
-                    
-                    end = time.time()
-                    print(f"4096x4096 image, batch size 1: {end - start:.2f} seconds")
-                    
-                    # Free memory
-                    del img, img_tensor, batch, out, conv1
-                    gc.collect()
-                except RuntimeError as e:
-                    print(f"Could not process 4096x4096 image: {e}")
                 
                 # 3. Advanced Image Transformations
                 print("\n=== 3. Running Advanced Image Transformations ===")
@@ -661,8 +630,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 8
-        Memory: 49152  # Increased to 48GB
+        Vcpus: 8              # Using 8 vCPUs
+        Memory: 30720         # ~30GB of RAM
         JobRoleArn: !GetAtt JobRole.Arn
 
   # CloudWatch Logs Group
@@ -728,3 +697,7 @@ Outputs:
   SubnetIds:
     Description: IDs of the subnets created for the Batch environment
     Value: !Join [", ", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+
+  MonitorJobStatusCommand:
+    Description: Command to monitor job status (replace job-id with actual ID)
+    Value: "watch -n 10 'aws batch describe-jobs --jobs job-id --query \"jobs[0].{JobName:jobName,Status:status,Reason:statusReason,StartedAt:startedAt,StoppedAt:stoppedAt}\"'"
