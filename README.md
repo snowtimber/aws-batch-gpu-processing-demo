@@ -1,3 +1,4 @@
+<!-- README.md -->
 # GPU-Accelerated Image Processing Benchmark with AWS Batch
 
 This repository contains an AWS SAM template that sets up a GPU-accelerated image processing benchmark environment using AWS Batch. The environment is fully self-contained and optimized for high-performance GPU workloads.

@@ -1,3 +1,4 @@
+# gpu-batch-benchmark.yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: GPU-optimized Image Processing Benchmark with AWS Batch using EC2
