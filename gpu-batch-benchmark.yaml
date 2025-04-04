@@ -11,13 +11,13 @@ Parameters:
     
   GPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.2xlarge,g4dn.4xlarge,g5.2xlarge
-    Description: List of GPU instance types with at least 32GB memory
+    Default: g4dn.4xlarge,g4dn.8xlarge,g5.4xlarge
+    Description: List of GPU instance types with at least 64GB memory
 
   CPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: r5.2xlarge,r5.4xlarge,m5.4xlarge,c5.9xlarge
-    Description: List of CPU instance types with at least 32GB memory
+    Default: r5.4xlarge,r5.8xlarge,m5.8xlarge,c5.18xlarge
+    Description: List of CPU instance types with at least 64GB memory
 
 Resources:
   # IAM Roles
@@ -448,8 +448,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 8              # Set for g4dn.2xlarge (8 vCPUs)
-        Memory: 30720         # ~30GB for working memory (g4dn.2xlarge has 32GB total)
+        Vcpus: 16             # Set for g4dn.4xlarge (16 vCPUs)
+        Memory: 61440         # 60GB (g4dn.4xlarge has 64GB total)
         ResourceRequirements:
           - Type: GPU
             Value: "1"
@@ -537,44 +537,50 @@ Resources:
                         # Clear memory before each test
                         gc.collect()
                         
-                        # Convert to torch tensor on CPU
-                        start = time.time()
-                        img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
-                        
-                        # Create batch
-                        batch = img_tensor.unsqueeze(0).repeat(batch_size, 1, 1, 1)
-                        
-                        # Image processing operations
-                        
-                        # Convolutions
-                        conv1 = torch.nn.Conv2d(3, 16, kernel_size=3, padding=1)
-                        conv2 = torch.nn.Conv2d(16, 32, kernel_size=3, padding=1)
-                        out = conv1(batch)
-                        out = torch.nn.functional.relu(out)
-                        out = conv2(out)
-                        out = torch.nn.functional.relu(out)
-                        
-                        # Pooling
-                        out = torch.nn.functional.max_pool2d(out, 2)
-                        
-                        # More convolutions
-                        conv3 = torch.nn.Conv2d(32, 64, kernel_size=3, padding=1)
-                        out = conv3(out)
-                        out = torch.nn.functional.relu(out)
-                        
-                        # Batch normalization
-                        bn = torch.nn.BatchNorm2d(64)
-                        out = bn(out)
-                        
-                        # Final pooling
-                        out = torch.nn.functional.max_pool2d(out, 2)
-                        
-                        end = time.time()
-                        print(f"Batch size {batch_size}: {end - start:.2f} seconds")
-                        
-                        # Free memory
-                        del img_tensor, batch, out, conv1, conv2, conv3, bn
-                        gc.collect()
+                        try:
+                            # Convert to torch tensor on CPU
+                            start = time.time()
+                            img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+                            
+                            # Create batch
+                            batch = img_tensor.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+                            
+                            # Image processing operations
+                            
+                            # Convolutions
+                            conv1 = torch.nn.Conv2d(3, 16, kernel_size=3, padding=1)
+                            conv2 = torch.nn.Conv2d(16, 32, kernel_size=3, padding=1)
+                            out = conv1(batch)
+                            out = torch.nn.functional.relu(out)
+                            out = conv2(out)
+                            out = torch.nn.functional.relu(out)
+                            
+                            # Pooling
+                            out = torch.nn.functional.max_pool2d(out, 2)
+                            
+                            # More convolutions
+                            conv3 = torch.nn.Conv2d(32, 64, kernel_size=3, padding=1)
+                            out = conv3(out)
+                            out = torch.nn.functional.relu(out)
+                            
+                            # Batch normalization
+                            bn = torch.nn.BatchNorm2d(64)
+                            out = bn(out)
+                            
+                            # Final pooling
+                            out = torch.nn.functional.max_pool2d(out, 2)
+                            
+                            end = time.time()
+                            print(f"Batch size {batch_size}: {end - start:.2f} seconds")
+                            
+                            # Free memory
+                            del img_tensor, batch, out, conv1, conv2, conv3, bn
+                            gc.collect()
+                        except RuntimeError as e:
+                            if "out of memory" in str(e):
+                                print(f"Not enough memory for image size {img_size} with batch size {batch_size}")
+                            else:
+                                print(f"Error processing image size {img_size} with batch size {batch_size}: {e}")
                 
                 # 3. Advanced Image Transformations
                 print("\n=== 3. Running Advanced Image Transformations ===")
@@ -630,8 +636,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 8              # Using 8 vCPUs
-        Memory: 30720         # ~30GB of RAM
+        Vcpus: 16             # Using 16 vCPUs
+        Memory: 61440         # 60GB of RAM
         JobRoleArn: !GetAtt JobRole.Arn
 
   # CloudWatch Logs Group
@@ -690,6 +696,10 @@ Outputs:
     Description: Command to extract just the benchmark timing results (replace job-id with actual ID)
     Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM --output text | grep -E 'multiplication|Batch size|Operation'"
 
+  MonitorJobStatusCommand:
+    Description: Command to monitor job status (replace job-id with actual ID)
+    Value: "watch -n 10 'aws batch describe-jobs --jobs job-id --query \"jobs[0].{JobName:jobName,Status:status,Reason:statusReason,StartedAt:startedAt,StoppedAt:stoppedAt}\"'"
+
   VpcId:
     Description: ID of the VPC created for the Batch environment
     Value: !Ref BatchVPC
@@ -697,7 +707,3 @@ Outputs:
   SubnetIds:
     Description: IDs of the subnets created for the Batch environment
     Value: !Join [", ", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
-
-  MonitorJobStatusCommand:
-    Description: Command to monitor job status (replace job-id with actual ID)
-    Value: "watch -n 10 'aws batch describe-jobs --jobs job-id --query \"jobs[0].{JobName:jobName,Status:status,Reason:statusReason,StartedAt:startedAt,StoppedAt:stoppedAt}\"'"
