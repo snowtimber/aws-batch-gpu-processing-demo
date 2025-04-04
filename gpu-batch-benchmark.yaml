@@ -1,7 +1,7 @@
 # gpu-batch-benchmark.yaml
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: GPU-optimized Image Processing Benchmark with AWS Batch using EC2
+Description: GPU and CPU Image Processing Benchmark with AWS Batch using EC2
 
 Parameters:
   MaxvCpus:
@@ -13,6 +13,11 @@ Parameters:
     Type: CommaDelimitedList
     Default: g4dn.xlarge,g5.xlarge,p3.2xlarge
     Description: List of GPU instance types to use for the compute environment
+
+  CPUInstanceTypes:
+    Type: CommaDelimitedList
+    Default: c5.2xlarge,c5n.2xlarge,m5.2xlarge
+    Description: List of CPU instance types to use for the CPU compute environment
 
 Resources:
   # IAM Roles
@@ -105,14 +110,14 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-VPC"
+          Value: !Sub "${AWS::StackName}-VPC"
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-IGW"
+          Value: !Sub "${AWS::StackName}-IGW"
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -129,7 +134,7 @@ Resources:
       AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-PublicSubnet1"
+          Value: !Sub "${AWS::StackName}-PublicSubnet1"
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
@@ -140,7 +145,7 @@ Resources:
       AvailabilityZone: !Select [1, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-PublicSubnet2"
+          Value: !Sub "${AWS::StackName}-PublicSubnet2"
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -148,7 +153,7 @@ Resources:
       VpcId: !Ref BatchVPC
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-PublicRouteTable"
+          Value: !Sub "${AWS::StackName}-PublicRouteTable"
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -180,9 +185,9 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub "\${AWS::StackName}-BatchSG"
+          Value: !Sub "${AWS::StackName}-BatchSG"
 
-  # Batch Compute Environment
+  # Batch Compute Environments
   GpuComputeEnvironment:
     Type: AWS::Batch::ComputeEnvironment
     DependsOn: VPCGatewayAttachment
@@ -203,14 +208,33 @@ Resources:
         InstanceRole: !GetAtt BatchInstanceProfile.Arn
         LaunchTemplate:
           LaunchTemplateId: !Ref GpuLaunchTemplate
-          Version: \$Latest
+          Version: $Latest
         AllocationStrategy: BEST_FIT_PROGRESSIVE
-        EC2Configuration:
-          - ImageType: ECS_AL2_NVIDIA
-            ImageIdOverride: ami-072324a133dc4f9c9  # Latest NVIDIA GPU-Optimized AMI (Deep Learning Base Ubuntu 20.04)
+        ImageId: ami-072324a133dc4f9c9  # Deep Learning Base Ubuntu 20.04
       State: ENABLED
 
-  # Job Queue
+  CPUComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Type: MANAGED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      ComputeResources:
+        Type: EC2
+        MaxvCpus: !Ref MaxvCpus
+        MinvCpus: 0
+        DesiredvCpus: 0
+        InstanceTypes: !Ref CPUInstanceTypes
+        Subnets: 
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        InstanceRole: !GetAtt BatchInstanceProfile.Arn
+        AllocationStrategy: BEST_FIT_PROGRESSIVE
+      State: ENABLED
+
+  # Job Queues
   GpuJobQueue:
     Type: AWS::Batch::JobQueue
     Properties:
@@ -220,7 +244,16 @@ Resources:
       Priority: 1
       State: ENABLED
 
-  # Job Definition
+  CPUJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref CPUComputeEnvironment
+          Order: 1
+      Priority: 1
+      State: ENABLED
+
+  # Job Definitions
   ImageProcessingJobDefinition:
     Type: AWS::Batch::JobDefinition
     Properties:
@@ -391,6 +424,160 @@ Resources:
                 - READ
                 - WRITE
 
+  CPUImageProcessingJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Type: container
+      JobDefinitionName: cpu-image-processing-benchmark
+      ContainerProperties:
+        Image: ubuntu:22.04
+        Command:
+          - bash
+          - -c
+          - |
+            echo "Starting CPU Benchmark"
+            
+            # Install Python and necessary libraries
+            apt-get update && apt-get install -y python3-pip
+            pip3 install numpy pillow opencv-python torch torchvision
+            
+            # Create benchmark script
+            cat << 'EOF' > /tmp/benchmark.py
+            import time
+            import numpy as np
+            import torch
+            import cv2
+            import os
+            
+            def benchmark_cpu():
+                print("=== CPU Benchmark for Image Processing ===")
+                
+                # Force CPU computations
+                torch.set_num_threads(os.cpu_count())
+                device = torch.device('cpu')
+                print(f"Using CPU with {os.cpu_count()} threads")
+                print(f"PyTorch version: {torch.__version__}")
+                
+                # 1. Matrix Operations Benchmark
+                print("\n=== 1. Running Matrix Operations Benchmark ===")
+                sizes = [1000, 2000, 5000]  # Smaller sizes for CPU
+                for size in sizes:
+                    start = time.time()
+                    
+                    # Create large tensors on CPU
+                    a = torch.randn(size, size, device=device)
+                    b = torch.randn(size, size, device=device)
+                    
+                    # Matrix multiplication
+                    c = torch.matmul(a, b)
+                    
+                    end = time.time()
+                    print(f"Matrix multiplication {size}x{size}: {end - start:.2f} seconds")
+                
+                # 2. Image Processing Benchmark
+                print("\n=== 2. Running Image Processing Benchmark ===")
+                img_sizes = [2048, 4096]  # Smaller sizes for CPU
+                batch_sizes = [1, 2, 4]  # Smaller batch sizes for CPU
+                
+                for img_size in img_sizes:
+                    print(f"\nProcessing images of size {img_size}x{img_size}")
+                    # Generate synthetic image
+                    img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
+                    
+                    for batch_size in batch_sizes:
+                        # Convert to torch tensor on CPU
+                        start = time.time()
+                        img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+                        
+                        # Create batch
+                        batch = img_tensor.unsqueeze(0).repeat(batch_size, 1, 1, 1)
+                        
+                        # Image processing operations
+                        
+                        # Convolutions
+                        conv1 = torch.nn.Conv2d(3, 16, kernel_size=3, padding=1)
+                        conv2 = torch.nn.Conv2d(16, 32, kernel_size=3, padding=1)
+                        out = conv1(batch)
+                        out = torch.nn.functional.relu(out)
+                        out = conv2(out)
+                        out = torch.nn.functional.relu(out)
+                        
+                        # Pooling
+                        out = torch.nn.functional.max_pool2d(out, 2)
+                        
+                        # More convolutions
+                        conv3 = torch.nn.Conv2d(32, 64, kernel_size=3, padding=1)
+                        out = conv3(out)
+                        out = torch.nn.functional.relu(out)
+                        
+                        # Batch normalization
+                        bn = torch.nn.BatchNorm2d(64)
+                        out = bn(out)
+                        
+                        # Final pooling
+                        out = torch.nn.functional.max_pool2d(out, 2)
+                        
+                        end = time.time()
+                        print(f"Batch size {batch_size}: {end - start:.2f} seconds")
+                
+                # 3. Advanced Image Transformations
+                print("\n=== 3. Running Advanced Image Transformations ===")
+                img_size = 2048  # Smaller size for CPU
+                img = np.random.randint(0, 256, (img_size, img_size, 3), dtype=np.uint8)
+                img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+                
+                # Record execution times for various operations
+                operations = {}
+                
+                # Gaussian Blur
+                start = time.time()
+                kernel_size = 15
+                sigma = 5.0
+                channels = img_tensor.shape[0]
+                
+                # Create 2D Gaussian kernel
+                kernel_size = kernel_size - kernel_size % 2  # Ensure odd size
+                kernel_x = torch.arange(kernel_size) - kernel_size // 2
+                kernel = torch.exp(-(kernel_x.view(-1, 1) ** 2 + kernel_x.view(1, -1) ** 2) / (2 * sigma ** 2))
+                kernel = kernel / kernel.sum()
+                
+                # Apply convolution for each channel
+                kernel = kernel.view(1, 1, kernel_size, kernel_size)
+                kernel = kernel.repeat(channels, 1, 1, 1)
+                padded = torch.nn.functional.pad(img_tensor.unsqueeze(0), (kernel_size//2, kernel_size//2, kernel_size//2, kernel_size//2), mode='reflect')
+                blurred = torch.nn.functional.conv2d(padded, kernel, groups=channels)
+                
+                operations["Gaussian Blur"] = time.time() - start
+                
+                # Edge Detection (Sobel)
+                start = time.time()
+                sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3)
+                sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3)
+                
+                padded = torch.nn.functional.pad(blurred, (1, 1, 1, 1), mode='reflect')
+                g_x = torch.nn.functional.conv2d(padded, sobel_x.repeat(channels, 1, 1, 1), groups=channels)
+                g_y = torch.nn.functional.conv2d(padded, sobel_y.repeat(channels, 1, 1, 1), groups=channels)
+                edges = torch.sqrt(g_x**2 + g_y**2)
+                
+                operations["Edge Detection"] = time.time() - start
+                
+                # Print results
+                print("\nAdvanced Operations Timing:")
+                for op, time_taken in operations.items():
+                    print(f"{op}: {time_taken:.2f} seconds")
+                
+                print("\n=== CPU Benchmark Complete ===")
+            
+            if __name__ == "__main__":
+                benchmark_cpu()
+            EOF
+            
+            # Run the benchmark
+            python3 /tmp/benchmark.py
+        Vcpus: 8
+        Memory: 16384
+        JobRoleArn: !GetAtt JobRole.Arn
+
   # CloudWatch Logs Group
   BatchLogGroup:
     Type: AWS::Logs::LogGroup
@@ -399,17 +586,29 @@ Resources:
       RetentionInDays: 14
 
 Outputs:
-  JobQueue:
-    Description: ARN of the Job Queue
+  GpuJobQueue:
+    Description: ARN of the GPU Job Queue
     Value: !Ref GpuJobQueue
     
-  JobDefinition:
-    Description: ARN of the Job Definition
-    Value: !Ref ImageProcessingJobDefinition
+  CpuJobQueue:
+    Description: ARN of the CPU Job Queue
+    Value: !Ref CPUJobQueue
     
-  SubmitJobCommand:
-    Description: Command to submit a job
-    Value: !Sub "aws batch submit-job --job-name gpu-benchmark-\$(date +%Y%m%d%H%M%S) --job-queue \${GpuJobQueue} --job-definition \${ImageProcessingJobDefinition}"
+  GpuJobDefinition:
+    Description: ARN of the GPU Job Definition
+    Value: !Ref ImageProcessingJobDefinition
+
+  CpuJobDefinition:
+    Description: ARN of the CPU Job Definition
+    Value: !Ref CPUImageProcessingJobDefinition
+    
+  SubmitGpuJobCommand:
+    Description: Command to submit a GPU job
+    Value: !Sub "aws batch submit-job --job-name gpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue ${GpuJobQueue} --job-definition ${ImageProcessingJobDefinition}"
+
+  SubmitCpuJobCommand:
+    Description: Command to submit a CPU job
+    Value: !Sub "aws batch submit-job --job-name cpu-benchmark-$(date +%Y%m%d%H%M%S) --job-queue ${CPUJobQueue} --job-definition ${CPUImageProcessingJobDefinition}"
     
   VpcId:
     Description: ID of the VPC created for the Batch environment
