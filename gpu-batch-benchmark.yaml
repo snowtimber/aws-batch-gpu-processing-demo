@@ -11,7 +11,7 @@ Parameters:
     
   InstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.xlarge,g5.xlarge,p3.2xlarge
+    Default: g4dn.xlarge,g5.xlarge
     Description: List of GPU instance types to use for the compute environment
 
   CPUInstanceTypes:
