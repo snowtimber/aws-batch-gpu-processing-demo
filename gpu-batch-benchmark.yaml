@@ -67,13 +67,19 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
 
-  # Launch Template with User Data to configure instance
+  # Launch Template with User Data to configure instance - FIXED WITH MIME MULTI-PART FORMAT
   GpuLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
         UserData:
           Fn::Base64: |
+            Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+            MIME-Version: 1.0
+
+            --==BOUNDARY==
+            Content-Type: text/x-shellscript; charset="us-ascii"
+
             #!/bin/bash
             # Change to ubuntu user for driver installation as per AMI requirements
             sudo -u ubuntu bash -c '
@@ -100,6 +106,8 @@ Resources:
               # Restart docker service to apply changes
               sudo systemctl restart docker
             '
+
+            --==BOUNDARY==--
 
   # Create VPC with public subnets for EC2 instances
   BatchVPC:
