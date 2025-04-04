@@ -67,7 +67,7 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
 
-  # Launch Template with User Data to configure instance - FIXED WITH MIME MULTI-PART FORMAT
+  # Launch Template with User Data to configure instance
   GpuLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -218,7 +218,7 @@ Resources:
           LaunchTemplateId: !Ref GpuLaunchTemplate
           Version: $Latest
         AllocationStrategy: BEST_FIT_PROGRESSIVE
-        ImageId: ami-072324a133dc4f9c9  # Deep Learning Base Ubuntu 20.04
+        ImageId: ami-07d64f46ec4b4c688  # Updated Deep Learning AMI
       State: ENABLED
 
   CPUComputeEnvironment:
@@ -279,7 +279,7 @@ Resources:
             nvidia-smi
             
             # Install Python and necessary libraries
-            apt-get update && apt-get install -y python3-pip
+            apt-get update && apt-get install -y python3-pip libgl1-mesa-glx libglib2.0-0
             pip3 install numpy pillow opencv-python torch torchvision
             
             # Create benchmark script
@@ -442,7 +442,7 @@ Resources:
       Timeout:
         AttemptDurationSeconds: 43200  # 12 hours - CPUs may need more time
       ContainerProperties:
-        Image: ubuntu:22.04
+        Image: nvidia/cuda:12.0.1-cudnn8-runtime-ubuntu22.04  # Using the same image as GPU for consistency
         Command:
           - bash
           - -c
@@ -450,7 +450,7 @@ Resources:
             echo "Starting CPU Benchmark"
             
             # Install Python and necessary libraries
-            apt-get update && apt-get install -y python3-pip
+            apt-get update && apt-get install -y python3-pip libgl1-mesa-glx libglib2.0-0
             pip3 install numpy pillow opencv-python torch torchvision
             
             # Create benchmark script
