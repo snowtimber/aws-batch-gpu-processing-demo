@@ -81,6 +81,10 @@ Resources:
             Content-Type: text/x-shellscript; charset="us-ascii"
 
             #!/bin/bash
+            # Create necessary directories if they don't exist
+            mkdir -p /etc/docker
+            mkdir -p /etc/ecs
+
             # Change to ubuntu user for driver installation as per AMI requirements
             sudo -u ubuntu bash -c '
               # Update and install dependencies
@@ -89,9 +93,10 @@ Resources:
               
               # Verify NVIDIA drivers are properly installed
               nvidia-smi
-              
-              # Setup Docker to use NVIDIA runtime
-              sudo tee /etc/docker/daemon.json <<EOF
+            '
+            
+            # Setup Docker to use NVIDIA runtime (this needs to be done as root)
+            cat > /etc/docker/daemon.json << EOF
             {
                 "default-runtime": "nvidia",
                 "runtimes": {
@@ -102,10 +107,19 @@ Resources:
                 }
             }
             EOF
-              
-              # Restart docker service to apply changes
-              sudo systemctl restart docker
-            '
+            
+            # Configure ECS
+            echo "ECS_CLUSTER=${AWS::StackName}" >> /etc/ecs/ecs.config
+            echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
+            echo "ECS_ENABLE_TASK_IAM_ROLE=true" >> /etc/ecs/ecs.config
+            echo "ECS_ENABLE_TASK_ENI=true" >> /etc/ecs/ecs.config
+            
+            # Restart docker service to apply changes
+            systemctl enable docker
+            systemctl restart docker
+            
+            # Final verification of NVIDIA setup
+            nvidia-smi
 
             --==BOUNDARY==--
 
