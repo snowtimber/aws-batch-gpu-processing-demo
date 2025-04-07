@@ -93,7 +93,17 @@ Resources:
             echo "ECS_UPDATES_ENABLED=true" >> /etc/ecs/ecs.config
             echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
             
+            # Handle fabric manager issue - disable the service to prevent failures
+            echo "Handling NVIDIA services setup..."
+            systemctl stop nvidia-fabricmanager.service 2>/dev/null || true
+            systemctl disable nvidia-fabricmanager.service 2>/dev/null || true
+            
+            # Validate NVIDIA setup
+            echo "Validating NVIDIA drivers..."
+            nvidia-smi || echo "Warning: nvidia-smi command failed"
+            
             # Restart ECS agent to apply changes
+            echo "Restarting ECS agent..."
             systemctl restart ecs
 
             # Print out important info for debugging
@@ -104,6 +114,7 @@ Resources:
             echo "ECS Agent status: $(systemctl is-active ecs)"
             echo "Docker status: $(systemctl is-active docker)"
             echo "NVIDIA drivers loaded: $(lsmod | grep -c nvidia || echo "No")"
+            echo "GPU detected: $(nvidia-smi -L || echo "No GPU detected")"
             echo "=========================="
 
             echo "GPU Configuration complete: $(date)"
