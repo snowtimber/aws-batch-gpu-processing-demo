@@ -220,7 +220,7 @@ Resources:
           Version: $Latest
         AllocationStrategy: BEST_FIT_PROGRESSIVE
         Ec2Configuration:
-          - ImageType: ECS_AL2023_NVIDIA
+          - ImageType: ECS_AL_NVIDIA
       State: ENABLED
 
   CPUComputeEnvironment:
