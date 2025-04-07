@@ -251,6 +251,17 @@ echo "=== Benchmark Complete ==="
 
 Save this script as `run-benchmarks.sh`, make it executable (`chmod +x run-benchmarks.sh`), and run it (`./run-benchmarks.sh`).
 
+run both commands:
+
+```bash
+sam deploy \
+  --template-file gpu-batch-benchmark.yaml \
+  --stack-name gpu-benchmark \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset && \
+  ./run-benchmarks.sh
+```
+
 ## Understanding the Benchmark Results
 
 Both the GPU and CPU benchmarks run identical operations on the same data sizes for direct comparison:
