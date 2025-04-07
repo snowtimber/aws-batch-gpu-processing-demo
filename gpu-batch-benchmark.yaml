@@ -85,14 +85,6 @@ Resources:
             exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
             echo "Starting GPU configuration for AWS Batch: $(date)"
 
-            # Configure ECS - critical for joining the cluster
-            echo "ECS_CLUSTER=${AWS::StackName}" >> /etc/ecs/ecs.config
-            echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
-            echo "ECS_ENABLE_TASK_IAM_ROLE=true" >> /etc/ecs/ecs.config
-            echo "ECS_ENABLE_TASK_ENI=true" >> /etc/ecs/ecs.config
-            echo "ECS_UPDATES_ENABLED=true" >> /etc/ecs/ecs.config
-            echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
-            
             # Handle fabric manager issue - disable the service to prevent failures
             echo "Handling NVIDIA services setup..."
             systemctl stop nvidia-fabricmanager.service 2>/dev/null || true
@@ -101,10 +93,66 @@ Resources:
             # Validate NVIDIA setup
             echo "Validating NVIDIA drivers..."
             nvidia-smi || echo "Warning: nvidia-smi command failed"
+
+            # Configure Docker for NVIDIA runtime
+            echo "Configuring Docker for NVIDIA runtime..."
+            DOCKER_CONFIG_FILE="/etc/docker/daemon.json"
+            if [ -f "$DOCKER_CONFIG_FILE" ]; then
+              # Backup the file
+              cp $DOCKER_CONFIG_FILE $DOCKER_CONFIG_FILE.bak
+              # Add NVIDIA runtime if not present
+              if ! grep -q "nvidia" $DOCKER_CONFIG_FILE; then
+                echo "Adding NVIDIA runtime to Docker daemon config..."
+                sed -i 's|{|{\n    "default-runtime": "nvidia",\n    "runtimes": {\n        "nvidia": {\n            "path": "/usr/bin/nvidia-container-runtime",\n            "runtimeArgs": []\n        }\n    },|' $DOCKER_CONFIG_FILE
+                # Restart Docker to apply changes
+                systemctl restart docker
+                echo "Docker daemon restarted with NVIDIA runtime configuration"
+              else
+                echo "NVIDIA runtime already configured in Docker daemon config"
+              fi
+            else
+              echo "Creating new Docker daemon config with NVIDIA runtime..."
+              mkdir -p /etc/docker
+              cat > $DOCKER_CONFIG_FILE << 'EOF'
+            {
+              "default-runtime": "nvidia",
+              "runtimes": {
+                  "nvidia": {
+                      "path": "/usr/bin/nvidia-container-runtime",
+                      "runtimeArgs": []
+                  }
+              }
+            }
+            EOF
+              systemctl restart docker
+              echo "Docker daemon restarted with new NVIDIA runtime configuration"
+            fi
+
+            # Configure ECS - critical for joining the cluster
+            echo "Configuring ECS agent for GPU support..."
+            cat > /etc/ecs/ecs.config << EOF
+            ECS_CLUSTER=${AWS::StackName}
+            ECS_ENABLE_GPU_SUPPORT=true
+            ECS_ENABLE_TASK_IAM_ROLE=true
+            ECS_ENABLE_TASK_ENI=true
+            ECS_UPDATES_ENABLED=true
+            ECS_ENABLE_CONTAINER_METADATA=true
+            ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+            ECS_LOGLEVEL=debug
+            EOF
             
             # Restart ECS agent to apply changes
             echo "Restarting ECS agent..."
             systemctl restart ecs
+
+            # Verify ECS agent is running and detecting GPU
+            echo "Verifying ECS agent status..."
+            sleep 5
+            systemctl status ecs
+            
+            # Check ECS agent logs for GPU detection
+            echo "Checking ECS agent logs for GPU detection..."
+            grep -i "gpu\|nvidia" /var/log/ecs/ecs-agent.log.* /var/log/ecs/ecs-agent.log || echo "No GPU info found in ECS agent logs"
 
             # Print out important info for debugging
             echo "System information summary:"
@@ -113,6 +161,8 @@ Resources:
             echo "Hostname: $(hostname)"
             echo "ECS Agent status: $(systemctl is-active ecs)"
             echo "Docker status: $(systemctl is-active docker)"
+            echo "Docker GPU runtime check:"
+            docker info | grep -i runtime
             echo "NVIDIA drivers loaded: $(lsmod | grep -c nvidia || echo "No")"
             echo "GPU detected: $(nvidia-smi -L || echo "No GPU detected")"
             echo "=========================="
