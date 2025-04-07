@@ -90,24 +90,81 @@ Resources:
             MIME-Version: 1.0
 
             --==BOUNDARY==
+            Content-Type: text/cloud-config; charset="us-ascii"
+
+            #cloud-config
+            write_files:
+              - path: /etc/ecs/ecs.config
+                owner: root:root
+                permissions: '0644'
+                content: |
+                  ECS_ENABLE_GPU_SUPPORT=true
+                  ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+                  ECS_CONTAINER_INSTANCE_TAGS={"GPUEnabled": "true"}
+                  ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+
+            --==BOUNDARY==
             Content-Type: text/x-shellscript; charset="us-ascii"
 
             #!/bin/bash
-            # Set up logging
-            exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
-            echo "Starting GPU configuration for AWS Batch: $(date)"
+            # Set up logging with timestamps
+            exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+            echo "Starting GPU configuration for AWS Batch: \$(date)"
+
+            # Function to log with timestamps
+            log() {
+              echo "\$(date '+%Y-%m-%d %H:%M:%S') - \$1"
+            }
+
+            # Wait for system to stabilize
+            log "Waiting for system initialization..."
+            sleep 10
 
             # Handle fabric manager issue
-            echo "Handling NVIDIA services setup..."
+            log "Handling NVIDIA services setup..."
             systemctl stop nvidia-fabricmanager.service 2>/dev/null || true
             systemctl disable nvidia-fabricmanager.service 2>/dev/null || true
+            systemctl start nvidia-persistenced 2>/dev/null || true
+            
+            # Check for NVIDIA drivers
+            log "Validating NVIDIA drivers..."
+            if ! nvidia-smi; then
+              log "ERROR: NVIDIA drivers not loaded properly!"
+              # Try to reload NVIDIA drivers
+              modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia
+              modprobe nvidia
+              modprobe nvidia_modeset
+              modprobe nvidia_drm
+              modprobe nvidia_uvm
+              
+              # Check again
+              if ! nvidia-smi; then
+                log "CRITICAL: Failed to load NVIDIA drivers after retry"
+              else
+                log "NVIDIA drivers loaded successfully after retry"
+              fi
+            fi
 
-            # Validate NVIDIA setup
-            echo "Validating NVIDIA drivers..."
-            nvidia-smi || echo "Warning: nvidia-smi command failed"
+            # Verify NVIDIA container runtime installation
+            log "Checking NVIDIA container runtime..."
+            if [ -f /usr/bin/nvidia-container-runtime ]; then
+              log "NVIDIA container runtime is installed at \$(which nvidia-container-runtime)"
+            else
+              log "ERROR: NVIDIA container runtime is missing, attempting to install..."
+              # For Amazon Linux 2
+              amazon-linux-extras enable docker
+              yum install -y nvidia-container-toolkit nvidia-container-runtime
+              
+              # Check if installation succeeded
+              if [ -f /usr/bin/nvidia-container-runtime ]; then
+                log "Successfully installed NVIDIA container runtime"
+              else
+                log "CRITICAL: Failed to install NVIDIA container runtime"
+              fi
+            fi
 
             # Configure Docker for NVIDIA runtime
-            echo "Configuring Docker for NVIDIA runtime..."
+            log "Configuring Docker for NVIDIA runtime..."
             mkdir -p /etc/docker
             cat > /etc/docker/daemon.json << 'EOF'
             {
@@ -117,39 +174,81 @@ Resources:
                   "path": "/usr/bin/nvidia-container-runtime",
                   "runtimeArgs": []
                 }
-              }
+              },
+              "log-driver": "awslogs",
+              "storage-driver": "overlay2"
             }
             EOF
-            
-            # Restart Docker to apply changes
-            systemctl restart docker
-            echo "Docker daemon restarted with new NVIDIA runtime configuration"
 
-            # Add GPU support to existing ECS config (preserving the cluster name)
-            echo "Configuring ECS agent for GPU support..."
-            echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
-            echo "ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]" >> /etc/ecs/ecs.config
+            # Restart Docker to apply changes
+            log "Restarting Docker service..."
+            systemctl restart docker
             
-            # Restart ECS agent to apply changes
-            echo "Restarting ECS agent..."
+            # Wait for Docker to fully initialize
+            sleep 15
+            
+            # Verify Docker is running with NVIDIA runtime
+            log "Verifying Docker service status..."
+            systemctl status docker --no-pager
+            
+            # Test Docker configuration
+            log "Docker runtime configuration:"
+            docker info | grep -i runtime || log "WARNING: Failed to get Docker runtime info"
+            
+            # Test NVIDIA container capability
+            log "Testing NVIDIA container capability..."
+            docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi || log "WARNING: GPU container test failed"
+            
+            # Ensure ECS agent has proper GPU configuration
+            log "Configuring ECS agent for GPU support..."
+            # Config file already created via cloud-init, but ensure GPU setting is there
+            grep -q "ECS_ENABLE_GPU_SUPPORT=true" /etc/ecs/ecs.config || echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
+            
+            # Add container instance attributes for GPU
+            cat >> /etc/ecs/ecs.config << 'EOF'
+            ECS_INSTANCE_ATTRIBUTES={"GPU": "true", "GPU_TYPE": "NVIDIA_T4"}
+            EOF
+            
+            # Restart ECS agent with debug logs
+            log "Setting ECS agent to debug mode for better logging..."
+            sed -i 's/ECS_LOGLEVEL=.*/ECS_LOGLEVEL=debug/' /etc/ecs/ecs.config || echo "ECS_LOGLEVEL=debug" >> /etc/ecs/ecs.config
+            
+            # Restart ECS agent
+            log "Restarting ECS agent..."
             systemctl restart ecs
             
-            # Print out important info for debugging
-            echo "System information summary:"
-            echo "=========================="
-            echo "Date: $(date)"
-            echo "Hostname: $(hostname)"
-            echo "ECS Config:"
-            cat /etc/ecs/ecs.config
-            echo "ECS Agent status: $(systemctl is-active ecs)"
-            echo "Docker status: $(systemctl is-active docker)"
-            echo "Docker GPU runtime check:"
-            docker info | grep -i runtime
-            echo "NVIDIA drivers loaded: $(lsmod | grep -c nvidia || echo "No")"
-            echo "GPU detected: $(nvidia-smi -L || echo "No GPU detected")"
-            echo "=========================="
-
-            echo "GPU Configuration complete: $(date)"
+            # Wait for ECS agent to initialize
+            sleep 15
+            
+            # Verify ECS agent is running
+            log "Checking ECS agent status..."
+            systemctl status ecs --no-pager
+            
+            # Check ECS agent logs
+            log "Recent ECS agent logs:"
+            tail -50 /var/log/ecs/ecs-agent.log || log "WARNING: Could not display ECS agent logs"
+            
+            # Verify ECS agent is aware of GPU
+            log "Checking if ECS agent recognizes GPU:"
+            curl -s http://localhost:51678/v1/metadata | grep -i gpu || log "WARNING: GPU not found in ECS metadata"
+            
+            # Print GPU status for verification
+            log "GPU Status:"
+            nvidia-smi
+            
+            # Final system information
+            log "System information summary:"
+            log "=========================="
+            log "Date: \$(date)"
+            log "Hostname: \$(hostname)"
+            log "Kernel: \$(uname -r)"
+            log "ECS Agent status: \$(systemctl is-active ecs)"
+            log "Docker status: \$(systemctl is-active docker)"
+            log "NVIDIA drivers loaded: \$(lsmod | grep -c nvidia || echo "No")"
+            log "GPU detected: \$(nvidia-smi -L || echo "No GPU detected")"
+            log "=========================="
+            
+            log "GPU Configuration complete: \$(date)"
 
             --==BOUNDARY==--
 
