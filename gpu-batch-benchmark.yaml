@@ -47,6 +47,18 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+      Policies:
+        - PolicyName: EC2TagsAndECSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeTags'
+                  - 'ec2:DescribeInstances'
+                  - 'ecs:ListClusters'
+                  - 'ecs:DescribeClusters'
+                Resource: '*'
 
   BatchInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -92,16 +104,7 @@ Resources:
 
             # Validate NVIDIA setup
             echo "Validating NVIDIA drivers..."
-            nvidia-smi || echo "WARNING: nvidia-smi command failed"
-
-            # Install AWS CLI if needed
-            if ! command -v aws &> /dev/null; then
-              echo "Installing AWS CLI..."
-              yum install -y unzip
-              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip -q awscliv2.zip
-              ./aws/install
-            fi
+            nvidia-smi || echo "Warning: nvidia-smi command failed"
 
             # Configure Docker for NVIDIA runtime
             echo "Configuring Docker for NVIDIA runtime..."
@@ -117,118 +120,27 @@ Resources:
               }
             }
             EOF
+            
+            # Restart Docker to apply changes
             systemctl restart docker
             echo "Docker daemon restarted with new NVIDIA runtime configuration"
 
-            # Install NVIDIA Container Runtime if not present
-            if ! command -v nvidia-container-runtime &> /dev/null; then
-              echo "Installing NVIDIA Container Runtime..."
-              distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-              curl -s -L https://nvidia.github.io/nvidia-container-runtime/centos7/nvidia-container-runtime.repo | \
-                tee /etc/yum.repos.d/nvidia-container-runtime.repo
-              yum install -y nvidia-container-runtime
-            fi
-
-            # Get instance ID and AWS Batch cluster name - CRITICAL PART
-            INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-            echo "Instance ID: $INSTANCE_ID"
-
-            # Explicitly find all EC2 tags
-            echo "Fetching EC2 tags..."
-            TAGS=$(/usr/local/bin/aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" --region $(curl -s http://169.254.169.254/latest/meta-data/placement/region))
-            echo "Found tags: $TAGS"
-
-            # Extract the cluster name specifically from AWS Batch compute environment tag
-            CLUSTER_NAME=$(/usr/local/bin/aws ec2 describe-tags \
-              --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=aws:batch:compute-environment" \
-              --region $(curl -s http://169.254.169.254/latest/meta-data/placement/region) \
-              --query "Tags[0].Value" --output text)
-
-            if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-              echo "WARNING: Could not determine cluster name from aws:batch:compute-environment tag"
-              
-              # Try a different approach - check all tags
-              COMPUTE_ENV_TAG=$(/usr/local/bin/aws ec2 describe-tags \
-                --filters "Name=resource-id,Values=$INSTANCE_ID" \
-                --region $(curl -s http://169.254.169.254/latest/meta-data/placement/region) \
-                --query "Tags[?starts_with(Key, 'aws:batch') == \`true\`]" --output json)
-              
-              echo "Batch related tags: $COMPUTE_ENV_TAG"
-              
-              # Try the ECS cluster tag
-              CLUSTER_NAME=$(/usr/local/bin/aws ec2 describe-tags \
-                --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=aws:ecs:clusterName" \
-                --region $(curl -s http://169.254.169.254/latest/meta-data/placement/region) \
-                --query "Tags[0].Value" --output text)
-              
-              if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-                echo "ERROR: Could not determine cluster name from tags, using instance-id as fallback"
-                CLUSTER_NAME="AWSBatchComputeEnvironment-$INSTANCE_ID"
-              fi
-            fi
-
-            echo "Using cluster name: $CLUSTER_NAME"
-
-            # Configuring ECS agent with correct cluster name
+            # Add GPU support to existing ECS config (preserving the cluster name)
             echo "Configuring ECS agent for GPU support..."
-            cat > /etc/ecs/ecs.config << EOF
-            ECS_CLUSTER=$CLUSTER_NAME
-            ECS_ENABLE_GPU_SUPPORT=true
-            ECS_ENABLE_TASK_IAM_ROLE=true
-            ECS_ENABLE_TASK_ENI=true
-            ECS_UPDATES_ENABLED=true
-            ECS_ENABLE_CONTAINER_METADATA=true
-            ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
-            ECS_LOGLEVEL=debug
-            EOF
-
-            # Stop existing container if running
-            if docker ps -a | grep -q ecs-agent; then
-              echo "Stopping existing ECS agent container..."
-              docker stop ecs-agent
-              docker rm ecs-agent
-            fi
-
+            echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
+            echo "ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]" >> /etc/ecs/ecs.config
+            
             # Restart ECS agent to apply changes
             echo "Restarting ECS agent..."
             systemctl restart ecs
-
-            # Wait for ECS agent to register
-            echo "Waiting for ECS agent to register with cluster..."
-            sleep 15
-
-            # Verify ECS agent is running and detecting GPU
-            echo "Verifying ECS agent status..."
-            systemctl status ecs
-
-            # Check ECS agent logs for GPU detection
-            echo "Checking ECS agent logs for GPU detection..."
-            grep -i "gpu\|nvidia" /var/log/ecs/ecs-agent.log.* /var/log/ecs/ecs-agent.log || echo "No GPU info found in ECS agent logs"
-
-            # Check if instance registered with ECS
-            echo "Verifying ECS registration..."
-            ECS_METADATA=$(curl -s http://localhost:51678/v1/metadata 2>/dev/null || echo "failed")
-            if [ "$ECS_METADATA" == "failed" ]; then
-              echo "ERROR: Could not contact ECS agent metadata endpoint"
-            else
-              echo "ECS agent metadata: $ECS_METADATA"
-              CONTAINER_INSTANCE_ARN=$(echo $ECS_METADATA | grep -o 'arn:aws:ecs:[^"]*' || echo "")
-              if [ -z "$CONTAINER_INSTANCE_ARN" ]; then
-                echo "ERROR: Instance did not register with ECS cluster"
-              else
-                echo "SUCCESS: Instance registered as $CONTAINER_INSTANCE_ARN"
-              fi
-            fi
-
-            # Test Docker NVIDIA access
-            echo "Testing Docker NVIDIA runtime..."
-            docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi || echo "Docker GPU test failed"
-
-            # Print system information
+            
+            # Print out important info for debugging
             echo "System information summary:"
             echo "=========================="
             echo "Date: $(date)"
             echo "Hostname: $(hostname)"
+            echo "ECS Config:"
+            cat /etc/ecs/ecs.config
             echo "ECS Agent status: $(systemctl is-active ecs)"
             echo "Docker status: $(systemctl is-active docker)"
             echo "Docker GPU runtime check:"
