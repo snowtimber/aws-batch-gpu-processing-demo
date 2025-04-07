@@ -1,0 +1,6 @@
+sam deploy \
+  --template-file gpu-batch-benchmark.yaml \
+  --stack-name gpu-benchmark \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset && \
+  ./run-benchmarks.sh
