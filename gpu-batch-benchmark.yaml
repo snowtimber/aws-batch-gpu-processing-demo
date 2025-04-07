@@ -234,7 +234,7 @@ Resources:
           - ImageType: ECS_AL2_NVIDIA
       State: ENABLED
 
-  CPUComputeEnvironment:
+  CPUComputeEnvironment: # By not including Ec2Configuration, we can use the default ECS_AL2
     Type: AWS::Batch::ComputeEnvironment
     DependsOn: VPCGatewayAttachment
     Properties:
