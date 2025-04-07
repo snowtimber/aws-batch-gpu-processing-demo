@@ -221,7 +221,6 @@ Resources:
         AllocationStrategy: BEST_FIT_PROGRESSIVE
         Ec2Configuration:
           - ImageType: ECS_AL2023_NVIDIA
-            ImageIdOverride: ami-054c79d378ed2f549
       State: ENABLED
 
   CPUComputeEnvironment:
