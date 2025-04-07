@@ -109,11 +109,11 @@ Resources:
             #!/bin/bash
             # Set up logging with timestamps
             exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
-            echo "Starting GPU configuration for AWS Batch: $(date)"
+            echo "Starting GPU configuration for AWS Batch: \$(date)"
 
             # Function to log with timestamps
             log() {
-              echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+              echo "\$(date '+%Y-%m-%d %H:%M:%S') - \$1"
             }
 
             # Wait for system to stabilize
@@ -148,7 +148,7 @@ Resources:
             # Verify NVIDIA container runtime installation
             log "Checking NVIDIA container runtime..."
             if [ -f /usr/bin/nvidia-container-runtime ]; then
-              log "NVIDIA container runtime is installed at $(which nvidia-container-runtime)"
+              log "NVIDIA container runtime is installed at \$(which nvidia-container-runtime)"
             else
               log "ERROR: NVIDIA container runtime is missing, attempting to install..."
               # For Amazon Linux 2
@@ -239,16 +239,16 @@ Resources:
             # Final system information
             log "System information summary:"
             log "=========================="
-            log "Date: $(date)"
-            log "Hostname: $(hostname)"
-            log "Kernel: $(uname -r)"
-            log "ECS Agent status: $(systemctl is-active ecs)"
-            log "Docker status: $(systemctl is-active docker)"
-            log "NVIDIA drivers loaded: $(lsmod | grep -c nvidia || echo "No")"
-            log "GPU detected: $(nvidia-smi -L || echo "No GPU detected")"
+            log "Date: \$(date)"
+            log "Hostname: \$(hostname)"
+            log "Kernel: \$(uname -r)"
+            log "ECS Agent status: \$(systemctl is-active ecs)"
+            log "Docker status: \$(systemctl is-active docker)"
+            log "NVIDIA drivers loaded: \$(lsmod | grep -c nvidia || echo "No")"
+            log "GPU detected: \$(nvidia-smi -L || echo "No GPU detected")"
             log "=========================="
             
-            log "GPU Configuration complete: $(date)"
+            log "GPU Configuration complete: \$(date)"
 
             --==BOUNDARY==--
 
