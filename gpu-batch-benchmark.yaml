@@ -78,18 +78,6 @@ Resources:
             MIME-Version: 1.0
 
             --==BOUNDARY==
-            Content-Type: text/cloud-config; charset="us-ascii"
-
-            packages:
-            - amazon-ecs-init
-            - nvme-cli
-            - jq
-
-            runcmd:
-            - [systemctl, enable, amazon-ecs-init]
-            - [systemctl, start, amazon-ecs-init]
-
-            --==BOUNDARY==
             Content-Type: text/x-shellscript; charset="us-ascii"
 
             #!/bin/bash
@@ -97,73 +85,16 @@ Resources:
             exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
             echo "Starting GPU configuration for AWS Batch: $(date)"
 
-            # Configure ECS first - this is critical for joining the cluster
+            # Configure ECS - critical for joining the cluster
             echo "ECS_CLUSTER=${AWS::StackName}" >> /etc/ecs/ecs.config
             echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
             echo "ECS_ENABLE_TASK_IAM_ROLE=true" >> /etc/ecs/ecs.config
             echo "ECS_ENABLE_TASK_ENI=true" >> /etc/ecs/ecs.config
             echo "ECS_UPDATES_ENABLED=true" >> /etc/ecs/ecs.config
             echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
-
-            # Make sure ecs-init is running
-            systemctl status amazon-ecs-init || echo "ECS init not started yet"
-
-            # Create necessary directories
-            mkdir -p /etc/docker
-            mkdir -p /etc/ecs
-            mkdir -p /var/log/nvidia
-
-            # Configure Docker with NVIDIA
-            echo "Configuring Docker with NVIDIA runtime"
-            cat > /etc/docker/daemon.json <<EOF
-            {
-                "default-runtime": "nvidia",
-                "runtimes": {
-                    "nvidia": {
-                        "path": "/usr/bin/nvidia-container-runtime",
-                        "runtimeArgs": []
-                    }
-                }
-            }
-            EOF
-
-            # Restart docker to apply changes
-            systemctl restart docker
-            echo "Docker status after configuration:"
-            systemctl status docker
-
-            # Verify NVIDIA setup (using DLAMI which has NVIDIA drivers pre-installed)
-            echo "Checking NVIDIA driver setup:"
-            nvidia-smi || echo "nvidia-smi command failed - this is normal if drivers aren't loaded yet"
-
-            # Make sure nvidia-container-runtime is available
-            echo "Checking for nvidia-container-runtime:"
-            ls -la /usr/bin/nvidia-container-runtime || echo "nvidia-container-runtime not found - installing now"
-
-            # If the runtime isn't found, attempt to install it
-            if [ ! -f /usr/bin/nvidia-container-runtime ]; then
-                echo "Installing NVIDIA Container Runtime..."
-                distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
-                      && curl -s -L https://nvidia.github.io/libnvidia-container/gpgkey | sudo apt-key add - \
-                      && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-                            sudo tee /etc/apt/sources.list.d/libnvidia-container.list
-
-                apt-get update && apt-get install -y nvidia-container-runtime
-                
-                # Restart docker again after installing nvidia-container-runtime
-                systemctl restart docker
-            fi
-
-            # Check if ECS agent is running after all configuration
-            echo "Checking ECS agent status:"
-            if systemctl is-active --quiet ecs; then
-                echo "ECS agent is running"
-            else
-                echo "ECS agent is not running - attempting to restart"
-                systemctl restart ecs
-                sleep 5
-                systemctl status ecs
-            fi
+            
+            # Restart ECS agent to apply changes
+            systemctl restart ecs
 
             # Print out important info for debugging
             echo "System information summary:"
@@ -176,9 +107,6 @@ Resources:
             echo "=========================="
 
             echo "GPU Configuration complete: $(date)"
-
-            # Finally, restart ECS to make sure it picks up all changes
-            systemctl restart ecs
 
             --==BOUNDARY==--
 
@@ -292,7 +220,8 @@ Resources:
           Version: $Latest
         AllocationStrategy: BEST_FIT_PROGRESSIVE
         Ec2Configuration:
-          - ImageType: ECS_AL2_NVIDIA
+          - ImageType: ECS_AL2023_NVIDIA
+            ImageIdOverride: ami-054c79d378ed2f549
       State: ENABLED
 
   CPUComputeEnvironment:
