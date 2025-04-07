@@ -96,8 +96,24 @@ Resources:
 
             # Configure Docker for NVIDIA runtime
             echo "Configuring Docker for NVIDIA runtime..."
-            mkdir -p /etc/docker
-            cat > /etc/docker/daemon.json << 'EOF'
+            DOCKER_CONFIG_FILE="/etc/docker/daemon.json"
+            if [ -f "$DOCKER_CONFIG_FILE" ]; then
+              # Backup the file
+              cp $DOCKER_CONFIG_FILE $DOCKER_CONFIG_FILE.bak
+              # Add NVIDIA runtime if not present
+              if ! grep -q "nvidia" $DOCKER_CONFIG_FILE; then
+                echo "Adding NVIDIA runtime to Docker daemon config..."
+                sed -i 's|{|{\n    "default-runtime": "nvidia",\n    "runtimes": {\n        "nvidia": {\n            "path": "/usr/bin/nvidia-container-runtime",\n            "runtimeArgs": []\n        }\n    },|' $DOCKER_CONFIG_FILE
+                # Restart Docker to apply changes
+                systemctl restart docker
+                echo "Docker daemon restarted with NVIDIA runtime configuration"
+              else
+                echo "NVIDIA runtime already configured in Docker daemon config"
+              fi
+            else
+              echo "Creating new Docker daemon config with NVIDIA runtime..."
+              mkdir -p /etc/docker
+              cat > $DOCKER_CONFIG_FILE << 'EOF'
             {
               "default-runtime": "nvidia",
               "runtimes": {
@@ -108,39 +124,14 @@ Resources:
               }
             }
             EOF
-            
-            # Restart Docker to apply changes
-            systemctl restart docker
-            echo "Docker daemon restarted with new NVIDIA runtime configuration"
-            
-            # Install NVIDIA Container Runtime if not present
-            if ! command -v nvidia-container-runtime &> /dev/null; then
-              echo "Installing NVIDIA Container Runtime..."
-              distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-              curl -s -L https://nvidia.github.io/nvidia-container-runtime/centos7/nvidia-container-runtime.repo | \
-                tee /etc/yum.repos.d/nvidia-container-runtime.repo
-              yum install -y nvidia-container-runtime
+              systemctl restart docker
+              echo "Docker daemon restarted with new NVIDIA runtime configuration"
             fi
-            
-            # Make sure ECS_CLUSTER is correctly set
-            CLUSTER_NAME=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)" "Name=key,Values=aws:ecs:clusterName" --query "Tags[0].Value" --output text)
-            
-            if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-              echo "WARNING: Could not determine cluster name from instance tags"
-              # Try to get from Batch tags
-              CLUSTER_NAME=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)" "Name=key,Values=aws:batch:compute-environment" --query "Tags[0].Value" --output text)
-              if [ "$CLUSTER_NAME" == "None" ] || [ -z "$CLUSTER_NAME" ]; then
-                echo "ERROR: Could not determine cluster name from Batch tags either"
-                CLUSTER_NAME="gpu-batch-benchmark"  # Use default or stack name
-              fi
-            fi
-            
-            echo "Using cluster name: $CLUSTER_NAME"
-            
-            # Configuring ECS agent for GPU support
+
+            # Configure ECS - critical for joining the cluster
             echo "Configuring ECS agent for GPU support..."
             cat > /etc/ecs/ecs.config << EOF
-            ECS_CLUSTER=$CLUSTER_NAME
+            ECS_CLUSTER=${AWS::StackName}
             ECS_ENABLE_GPU_SUPPORT=true
             ECS_ENABLE_TASK_IAM_ROLE=true
             ECS_ENABLE_TASK_ENI=true
@@ -150,37 +141,19 @@ Resources:
             ECS_LOGLEVEL=debug
             EOF
             
-            # Stop and remove existing ECS agent container if running (force clean start)
-            if docker ps -a | grep -q ecs-agent; then
-              echo "Stopping existing ECS agent container..."
-              docker stop ecs-agent
-              docker rm ecs-agent
-            fi
-            
             # Restart ECS agent to apply changes
             echo "Restarting ECS agent..."
             systemctl restart ecs
-            
-            # Wait for ECS agent to register
-            echo "Waiting for ECS agent to register with cluster..."
-            sleep 10
-            
+
             # Verify ECS agent is running and detecting GPU
             echo "Verifying ECS agent status..."
+            sleep 5
             systemctl status ecs
             
             # Check ECS agent logs for GPU detection
             echo "Checking ECS agent logs for GPU detection..."
             grep -i "gpu\|nvidia" /var/log/ecs/ecs-agent.log.* /var/log/ecs/ecs-agent.log || echo "No GPU info found in ECS agent logs"
-            
-            # Check if instance registered with ECS
-            CONTAINER_INSTANCE_ARN=$(curl -s http://localhost:51678/v1/metadata | grep -o 'arn:aws:ecs:[^"]*')
-            if [ -z "$CONTAINER_INSTANCE_ARN" ]; then
-              echo "ERROR: Instance did not register with ECS cluster"
-            else
-              echo "SUCCESS: Instance registered as $CONTAINER_INSTANCE_ARN"
-            fi
-            
+
             # Print out important info for debugging
             echo "System information summary:"
             echo "=========================="
@@ -192,10 +165,6 @@ Resources:
             docker info | grep -i runtime
             echo "NVIDIA drivers loaded: $(lsmod | grep -c nvidia || echo "No")"
             echo "GPU detected: $(nvidia-smi -L || echo "No GPU detected")"
-            
-            # Validate Docker can access GPUs
-            echo "Testing Docker NVIDIA runtime..."
-            docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi || echo "Docker GPU test failed"
             echo "=========================="
 
             echo "GPU Configuration complete: $(date)"
