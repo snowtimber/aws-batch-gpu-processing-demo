@@ -238,28 +238,6 @@ Resources:
             log "ECS Config File Contents:"
             cat /etc/ecs/ecs.config
             
-            # Check network connectivity to ECS endpoints
-            log "Checking network connectivity to ECS endpoints..."
-            ECS_ENDPOINTS=(
-              "ecs.us-east-1.amazonaws.com"
-              "ecs-a-1.us-east-1.amazonaws.com"
-              "ecs-t-1.us-east-1.amazonaws.com"
-              "ecs.us-west-2.amazonaws.com"
-              "ecs-a-1.us-west-2.amazonaws.com"
-              "ecs-t-1.us-west-2.amazonaws.com"
-              "ecs.eu-west-1.amazonaws.com"
-              "ecs-a-1.eu-west-1.amazonaws.com"
-              "ecs-t-1.eu-west-1.amazonaws.com"
-            )
-            
-            for endpoint in "${ECS_ENDPOINTS[@]}"; do
-              if curl -s --connect-timeout 5 "https://$endpoint" > /dev/null; then
-                log "Connection to $endpoint: SUCCESS"
-              else
-                log "Connection to $endpoint: FAILED"
-              fi
-            done
-            
             # Print GPU status for verification
             log "GPU Status:"
             nvidia-smi
@@ -501,7 +479,7 @@ Resources:
                     # 2. Image Processing Benchmark
                     print("\n=== 2. Running Image Processing Benchmark ===")
                     img_sizes = [2048, 4096]
-                    batch_sizes = [1, 2, 4]
+                    batch_sizes = [1]  # Reduced from [1, 2, 4] to prevent out-of-memory errors
                     
                     for img_size in img_sizes:
                         print(f"\nProcessing images of size {img_size}x{img_size}")
@@ -698,7 +676,7 @@ Resources:
                 print("\n=== 2. Running Image Processing Benchmark ===")
                 # Now we can use the same sizes as GPU since we have more memory
                 img_sizes = [2048, 4096]  # Same as GPU benchmark
-                batch_sizes = [1, 2, 4]   # Same as GPU benchmark
+                batch_sizes = [1]   # Reduced from [1, 2, 4] to prevent out-of-memory errors
                 
                 for img_size in img_sizes:
                     print(f"\nProcessing images of size {img_size}x{img_size}")
