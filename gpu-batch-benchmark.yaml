@@ -11,8 +11,8 @@ Parameters:
     
   GPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.8xlarge,g5.8xlarge,g5.12xlarge,p3.2xlarge
-    Description: List of GPU instance types with larger memory capacity
+    Default: g5.8xlarge,g5.12xlarge,p3.2xlarge
+    Description: List of GPU instance types with larger GPU memory (24GB A10G or 16GB V100)
 
   CPUInstanceTypes:
     Type: CommaDelimitedList
@@ -388,7 +388,7 @@ Resources:
         LaunchTemplate:
           LaunchTemplateId: !Ref GpuLaunchTemplate
           Version: $Latest
-        AllocationStrategy: BEST_FIT_PROGRESSIVE
+        AllocationStrategy: BEST_FIT
         Ec2Configuration:
           - ImageType: ECS_AL2_NVIDIA
       State: ENABLED
