@@ -205,36 +205,92 @@ Resources:
             
             # Ensure ECS agent has proper GPU configuration
             log "Configuring ECS agent for GPU support..."
-            # Config file already created via cloud-init, but ensure GPU setting is there
-            grep -q "ECS_ENABLE_GPU_SUPPORT=true" /etc/ecs/ecs.config || echo "ECS_ENABLE_GPU_SUPPORT=true" >> /etc/ecs/ecs.config
             
-            # Add container instance attributes for GPU
-            cat >> /etc/ecs/ecs.config << 'EOF'
+            # Backup original config
+            if [ -f /etc/ecs/ecs.config ]; then
+              cp /etc/ecs/ecs.config /etc/ecs/ecs.config.bak
+              log "Backed up original ECS config"
+            fi
+            
+            # Create a fresh ECS config with all required settings
+            cat > /etc/ecs/ecs.config << 'EOF'
+            ECS_ENABLE_GPU_SUPPORT=true
+            ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+            ECS_CONTAINER_INSTANCE_TAGS={"GPUEnabled": "true"}
+            ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
             ECS_INSTANCE_ATTRIBUTES={"GPU": "true", "GPU_TYPE": "NVIDIA_T4"}
+            ECS_ENABLE_TASK_IAM_ROLE=true
+            ECS_ENABLE_TASK_ENI=true
+            ECS_UPDATES_ENABLED=true
+            ECS_ENABLE_CONTAINER_METADATA=true
+            ECS_LOGLEVEL=debug
+            # DO NOT set ECS_CLUSTER - let AWS Batch handle this automatically
             EOF
             
-            # Restart ECS agent with debug logs
-            log "Setting ECS agent to debug mode for better logging..."
-            sed -i 's/ECS_LOGLEVEL=.*/ECS_LOGLEVEL=debug/' /etc/ecs/ecs.config || echo "ECS_LOGLEVEL=debug" >> /etc/ecs/ecs.config
+            log "Created new ECS config with GPU support"
+            
+            # Stop ECS agent first to ensure clean start
+            log "Stopping ECS agent..."
+            systemctl stop ecs
+            
+            # Check for any existing ECS agent state that might be causing issues
+            log "Checking for existing ECS agent state..."
+            if [ -d /var/lib/ecs/data ]; then
+              log "Found existing ECS agent state, backing up and removing..."
+              cp -r /var/lib/ecs/data /var/lib/ecs/data.bak
+              rm -rf /var/lib/ecs/data/*
+            fi
             
             # Restart ECS agent
-            log "Restarting ECS agent..."
-            systemctl restart ecs
+            log "Starting ECS agent with fresh state..."
+            systemctl start ecs
             
             # Wait for ECS agent to initialize
-            sleep 15
+            log "Waiting for ECS agent to initialize..."
+            sleep 30
             
             # Verify ECS agent is running
             log "Checking ECS agent status..."
             systemctl status ecs --no-pager
             
+            # Check ECS agent logs for cluster registration
+            log "Checking ECS agent logs for cluster registration..."
+            grep -i "cluster" /var/log/ecs/ecs-agent.log | tail -20 || log "WARNING: No cluster registration info found in ECS agent logs"
+            
             # Check ECS agent logs for GPU detection
-            log "Recent ECS agent logs (GPU-related entries):"
-            tail -100 /var/log/ecs/ecs-agent.log | grep -i gpu || log "WARNING: No GPU-related entries found in ECS agent logs"
+            log "Checking ECS agent logs for GPU detection..."
+            grep -i "gpu" /var/log/ecs/ecs-agent.log | tail -20 || log "WARNING: No GPU-related entries found in ECS agent logs"
             
             # Display ECS config file contents
             log "ECS Config File Contents:"
             cat /etc/ecs/ecs.config
+            
+            # Check which ECS cluster the agent is trying to join
+            log "Checking ECS cluster registration..."
+            CLUSTER_NAME=$(grep -i "cluster" /var/log/ecs/ecs-agent.log | grep -i "amazon-ecs" | tail -1 || echo "No cluster info found")
+            log "ECS agent is attempting to register with cluster: $CLUSTER_NAME"
+            
+            # Check network connectivity to ECS endpoints
+            log "Checking network connectivity to ECS endpoints..."
+            ECS_ENDPOINTS=(
+              "ecs.us-east-1.amazonaws.com"
+              "ecs-a-1.us-east-1.amazonaws.com"
+              "ecs-t-1.us-east-1.amazonaws.com"
+              "ecs.us-west-2.amazonaws.com"
+              "ecs-a-1.us-west-2.amazonaws.com"
+              "ecs-t-1.us-west-2.amazonaws.com"
+              "ecs.eu-west-1.amazonaws.com"
+              "ecs-a-1.eu-west-1.amazonaws.com"
+              "ecs-t-1.eu-west-1.amazonaws.com"
+            )
+            
+            for endpoint in "${ECS_ENDPOINTS[@]}"; do
+              if curl -s --connect-timeout 5 "https://$endpoint" > /dev/null; then
+                log "Connection to $endpoint: SUCCESS"
+              else
+                log "Connection to $endpoint: FAILED"
+              fi
+            done
             
             # Verify ECS agent is aware of GPU
             log "Checking if ECS agent recognizes GPU:"
