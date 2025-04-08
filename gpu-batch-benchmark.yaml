@@ -11,8 +11,8 @@ Parameters:
     
   GPUInstanceTypes:
     Type: CommaDelimitedList
-    Default: g4dn.4xlarge,g4dn.8xlarge,g5.4xlarge
-    Description: List of GPU instance types with at least 64GB memory
+    Default: g4dn.8xlarge,g5.8xlarge,g5.12xlarge,p3.2xlarge
+    Description: List of GPU instance types with larger memory capacity
 
   CPUInstanceTypes:
     Type: CommaDelimitedList
@@ -620,8 +620,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 16             # Set for g4dn.4xlarge (16 vCPUs)
-        Memory: 61440         # 60GB (g4dn.4xlarge has 64GB total)
+        Vcpus: 32             # Increased from 16 to 32 for larger instances
+        Memory: 122880        # Increased from 61440 to 122880 (120GB)
         ResourceRequirements:
           - Type: GPU
             Value: "1"
@@ -808,8 +808,8 @@ Resources:
             
             # Run the benchmark
             python3 /tmp/benchmark.py
-        Vcpus: 16             # Using 16 vCPUs
-        Memory: 61440         # 60GB of RAM
+        Vcpus: 32             # Increased to match GPU job definition
+        Memory: 122880        # Increased to match GPU job definition (120GB)
         JobRoleArn: !GetAtt JobRole.Arn
 
   # CloudWatch Logs Group

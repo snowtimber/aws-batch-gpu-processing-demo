@@ -21,6 +21,29 @@ Before you begin, ensure you have the following:
 3. Sufficient permissions to create IAM roles, VPC resources, EC2 instances, and AWS Batch resources
 4. Sufficient quota to launch GPU instances (p3, g4dn, or g5 instances)
 
+## GPU Memory Considerations
+
+When running GPU-accelerated workloads, it's important to understand the difference between system RAM and GPU VRAM:
+
+- **System RAM**: This is the memory available to the operating system and applications (e.g., 64GB on an r5.4xlarge)
+- **GPU VRAM**: This is the memory available on the GPU device itself (e.g., 16GB on a T4 GPU in g4dn.4xlarge)
+
+### Memory Requirements
+
+Our image processing benchmark requires significant memory, especially for larger image sizes and batch processing. Initial testing showed that smaller GPU instances like g4dn.4xlarge (with 16GB VRAM) can run out of memory when processing 4096x4096 images with larger batch sizes.
+
+To address this, we've updated the template to use larger GPU instances:
+- g4dn.8xlarge (32GB system RAM, same 16GB T4 GPU)
+- g5.8xlarge (32GB system RAM, 24GB A10G GPU)
+- g5.12xlarge (48GB system RAM, 24GB A10G GPU)
+- p3.2xlarge (61GB system RAM, 16GB V100 GPU)
+
+We've also increased the container resource allocations to match these larger instances:
+- Increased vCPUs from 16 to 32
+- Increased memory from 60GB to 120GB
+
+These changes ensure that both GPU and CPU jobs have comparable resources for a fair comparison.
+
 ## Step-by-Step Deployment Instructions
 
 ### 1. Clone this repository
@@ -35,8 +58,8 @@ cd gpu-batch-benchmark
 Open the `gpu-batch-benchmark.yaml` file and modify the following parameters if needed:
 
 - `MaxvCpus`: Maximum number of vCPUs for the compute environment (default: 64)
-- `InstanceTypes`: GPU instance types to use (default: g4dn.xlarge,g5.xlarge,p3.2xlarge)
-- `CPUInstanceTypes`: CPU instance types to use (default: c5.2xlarge,c5n.2xlarge,m5.2xlarge)
+- `GPUInstanceTypes`: GPU instance types to use (default: g4dn.8xlarge,g5.8xlarge,g5.12xlarge,p3.2xlarge)
+- `CPUInstanceTypes`: CPU instance types to use (default: r5.4xlarge,r5.8xlarge,m5.8xlarge,c5.18xlarge)
 
 ### 3. Deploy the AWS SAM template
 
@@ -358,6 +381,21 @@ aws batch describe-compute-environments --query "computeEnvironments[?computeEnv
 # Check service quotas for the instance types
 aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
 ```
+
+### GPU Memory Issues
+
+If you encounter GPU out-of-memory errors like:
+
+```
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate X.XX GiB.
+```
+
+Try these solutions:
+
+1. **Use larger GPU instances**: Update the `GPUInstanceTypes` parameter to use instances with more GPU memory
+2. **Reduce batch sizes**: Modify the benchmark script to use smaller batch sizes
+3. **Process images in chunks**: Update the script to process large images in smaller tiles
+4. **Enable PyTorch memory optimization**: Add `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to the container environment
 
 ### Viewing Error Logs
 
