@@ -186,7 +186,7 @@ Resources:
 
             # Restart Docker to apply changes
             log "Restarting Docker service..."
-            systemctl restart docker
+            systemctl restart docker --no-block
             
             # Wait for Docker to fully initialize
             sleep 15
@@ -229,46 +229,14 @@ Resources:
             
             log "Created new ECS config with GPU support"
             
-            # Stop ECS agent first to ensure clean start
-            log "Stopping ECS agent..."
-            systemctl stop ecs
-            
-            # Check for any existing ECS agent state that might be causing issues
-            log "Checking for existing ECS agent state..."
-            if [ -d /var/lib/ecs/data ]; then
-              log "Found existing ECS agent state, backing up and removing..."
-              cp -r /var/lib/ecs/data /var/lib/ecs/data.bak
-              rm -rf /var/lib/ecs/data/*
-            fi
-            
-            # Restart ECS agent
-            log "Starting ECS agent with fresh state..."
-            systemctl start ecs
-            
-            # Wait for ECS agent to initialize
-            log "Waiting for ECS agent to initialize..."
-            sleep 30
-            
-            # Verify ECS agent is running
-            log "Checking ECS agent status..."
-            systemctl status ecs --no-pager
-            
-            # Check ECS agent logs for cluster registration
-            log "Checking ECS agent logs for cluster registration..."
-            grep -i "cluster" /var/log/ecs/ecs-agent.log | tail -20 || log "WARNING: No cluster registration info found in ECS agent logs"
-            
-            # Check ECS agent logs for GPU detection
-            log "Checking ECS agent logs for GPU detection..."
-            grep -i "gpu" /var/log/ecs/ecs-agent.log | tail -20 || log "WARNING: No GPU-related entries found in ECS agent logs"
+            # Note: We intentionally do NOT start or configure the ECS agent here
+            # The ECS agent will be started automatically by AWS Batch after this script completes
+            # Starting it manually can cause a deadlock since cloud-init waits for this script to complete
+            log "ECS agent will be started automatically after UserData script completes"
             
             # Display ECS config file contents
             log "ECS Config File Contents:"
             cat /etc/ecs/ecs.config
-            
-            # Check which ECS cluster the agent is trying to join
-            log "Checking ECS cluster registration..."
-            CLUSTER_NAME=$(grep -i "cluster" /var/log/ecs/ecs-agent.log | grep -i "amazon-ecs" | tail -1 || echo "No cluster info found")
-            log "ECS agent is attempting to register with cluster: $CLUSTER_NAME"
             
             # Check network connectivity to ECS endpoints
             log "Checking network connectivity to ECS endpoints..."
@@ -291,10 +259,6 @@ Resources:
                 log "Connection to $endpoint: FAILED"
               fi
             done
-            
-            # Verify ECS agent is aware of GPU
-            log "Checking if ECS agent recognizes GPU:"
-            curl -s http://localhost:51678/v1/metadata | grep -i gpu || log "WARNING: GPU not found in ECS metadata"
             
             # Print GPU status for verification
             log "GPU Status:"
