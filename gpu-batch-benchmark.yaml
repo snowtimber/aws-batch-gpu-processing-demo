@@ -122,9 +122,14 @@ Resources:
 
             # Handle fabric manager issue
             log "Handling NVIDIA services setup..."
+            log "Disabling NVIDIA fabric manager (not needed for T4 GPUs)..."
             systemctl stop nvidia-fabricmanager.service 2>/dev/null || true
             systemctl disable nvidia-fabricmanager.service 2>/dev/null || true
+            
+            # Ensure NVIDIA persistence daemon is running
+            log "Starting NVIDIA persistence daemon..."
             systemctl start nvidia-persistenced 2>/dev/null || true
+            systemctl status nvidia-persistenced --no-pager || log "WARNING: NVIDIA persistence daemon may not be running"
             
             # Check for NVIDIA drivers
             log "Validating NVIDIA drivers..."
@@ -175,7 +180,6 @@ Resources:
                   "runtimeArgs": []
                 }
               },
-              "log-driver": "awslogs",
               "storage-driver": "overlay2"
             }
             EOF
@@ -197,7 +201,7 @@ Resources:
             
             # Test NVIDIA container capability
             log "Testing NVIDIA container capability..."
-            docker run --rm --gpus all nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi || log "WARNING: GPU container test failed"
+            docker run --rm --gpus all --log-driver=json-file nvidia/cuda:12.0.1-base-ubuntu22.04 nvidia-smi || log "WARNING: GPU container test failed"
             
             # Ensure ECS agent has proper GPU configuration
             log "Configuring ECS agent for GPU support..."
@@ -224,9 +228,13 @@ Resources:
             log "Checking ECS agent status..."
             systemctl status ecs --no-pager
             
-            # Check ECS agent logs
-            log "Recent ECS agent logs:"
-            tail -50 /var/log/ecs/ecs-agent.log || log "WARNING: Could not display ECS agent logs"
+            # Check ECS agent logs for GPU detection
+            log "Recent ECS agent logs (GPU-related entries):"
+            tail -100 /var/log/ecs/ecs-agent.log | grep -i gpu || log "WARNING: No GPU-related entries found in ECS agent logs"
+            
+            # Display ECS config file contents
+            log "ECS Config File Contents:"
+            cat /etc/ecs/ecs.config
             
             # Verify ECS agent is aware of GPU
             log "Checking if ECS agent recognizes GPU:"
