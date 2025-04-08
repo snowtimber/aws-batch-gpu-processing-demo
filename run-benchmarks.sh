@@ -52,16 +52,44 @@ done
 
 # Extract results
 echo "Extracting benchmark results..."
-GPU_RESULTS_CMD=$(echo $GET_RESULTS_BASE | sed "s/job-id/$GPU_JOB_ID/g")
-CPU_RESULTS_CMD=$(echo $GET_RESULTS_BASE | sed "s/job-id/$CPU_JOB_ID/g")
 
+# Get job definitions to construct the log stream names
+GPU_JOB_DEF=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$GPU_JOB_ID\") | .jobDefinition" | cut -d "/" -f 2 | cut -d ":" -f 1)
+CPU_JOB_DEF=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$CPU_JOB_ID\") | .jobDefinition" | cut -d "/" -f 2 | cut -d ":" -f 1)
+
+echo "GPU job definition: $GPU_JOB_DEF"
+echo "CPU job definition: $CPU_JOB_DEF"
+
+# Construct the correct log stream names
+GPU_LOG_STREAM="${GPU_JOB_DEF}/default/${GPU_JOB_ID}"
+CPU_LOG_STREAM="${CPU_JOB_DEF}/default/${CPU_JOB_ID}"
+
+echo "GPU log stream: $GPU_LOG_STREAM"
+echo "CPU log stream: $CPU_LOG_STREAM"
+
+# Extract GPU results
 echo "GPU results:"
-eval "$GPU_RESULTS_CMD" > gpu-results.txt
-cat gpu-results.txt
+echo "Fetching from log group: /aws/batch/job, stream: $GPU_LOG_STREAM"
+aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$GPU_LOG_STREAM" --output text | grep -E 'multiplication|Batch size|Operation' > gpu-results.txt
+if [ $? -eq 0 ] && [ -s gpu-results.txt ]; then
+    cat gpu-results.txt
+else
+    echo "Failed to retrieve GPU logs or no matching results found."
+    echo "Listing available log streams for this job:"
+    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "${GPU_JOB_DEF}/default/${GPU_JOB_ID}" --output text
+fi
 
+# Extract CPU results
 echo "CPU results:"
-eval "$CPU_RESULTS_CMD" > cpu-results.txt
-cat cpu-results.txt
+echo "Fetching from log group: /aws/batch/job, stream: $CPU_LOG_STREAM"
+aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$CPU_LOG_STREAM" --output text | grep -E 'multiplication|Batch size|Operation' > cpu-results.txt
+if [ $? -eq 0 ] && [ -s cpu-results.txt ]; then
+    cat cpu-results.txt
+else
+    echo "Failed to retrieve CPU logs or no matching results found."
+    echo "Listing available log streams for this job:"
+    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "${CPU_JOB_DEF}/default/${CPU_JOB_ID}" --output text
+fi
 
 echo "Results saved to gpu-results.txt and cpu-results.txt"
 echo "=== Benchmark Complete ==="

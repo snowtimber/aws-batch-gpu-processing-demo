@@ -790,13 +790,6 @@ Resources:
         Memory: 122880        # Increased to match GPU job definition (120GB)
         JobRoleArn: !GetAtt JobRole.Arn
 
-  # CloudWatch Logs Group
-  BatchLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /aws/batch/gpu-benchmark
-      RetentionInDays: 14
-
 Outputs:
   GpuJobQueue:
     Description: ARN of the GPU Job Queue
@@ -836,15 +829,15 @@ Outputs:
 
   GetGpuJobLogsCommand:
     Description: Command to get logs for a GPU job (replace job-id with actual ID)
-    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM"
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/job --log-stream-name $LOG_STREAM"
 
   GetCpuJobLogsCommand:
     Description: Command to get logs for a CPU job (replace job-id with actual ID)
-    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM"
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/job --log-stream-name $LOG_STREAM"
 
   GetBenchmarkResultsCommand:
     Description: Command to extract just the benchmark timing results (replace job-id with actual ID)
-    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM --output text | grep -E 'multiplication|Batch size|Operation'"
+    Value: !Sub "LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query 'jobs[0].container.logStreamName' --output text) && aws logs get-log-events --log-group-name /aws/batch/job --log-stream-name $LOG_STREAM --output text | grep -E 'multiplication|Batch size|Operation'"
 
   MonitorJobStatusCommand:
     Description: Command to monitor job status (replace job-id with actual ID)
