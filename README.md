@@ -3,6 +3,26 @@
 
 This repository contains an AWS SAM template that sets up GPU and CPU benchmarking environments for image processing using AWS Batch. The environment lets you compare the performance of GPU-accelerated workloads against CPU-only processing, with identical workloads for true apples-to-apples comparison.
 
+## Quick Start
+
+To deploy the CloudFormation stack and run the benchmarks in one command:
+
+```bash
+# Deploy and run benchmarks
+sam deploy \
+  --template-file gpu-batch-benchmark.yaml \
+  --stack-name gpu-benchmark \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset && \
+  ./run-benchmarks.sh
+```
+
+This will:
+1. Deploy all required AWS resources (VPC, IAM roles, AWS Batch environments)
+2. Submit both GPU and CPU benchmark jobs
+3. Monitor job progress until completion
+4. Extract and display benchmark results
+
 ## Overview
 
 The benchmark runs identical image processing operations on both GPU and CPU instances, allowing you to:
@@ -274,17 +294,6 @@ echo "=== Benchmark Complete ==="
 
 Save this script as `run-benchmarks.sh`, make it executable (`chmod +x run-benchmarks.sh`), and run it (`./run-benchmarks.sh`).
 
-run both commands:
-
-```bash
-sam deploy \
-  --template-file gpu-batch-benchmark.yaml \
-  --stack-name gpu-benchmark \
-  --capabilities CAPABILITY_IAM \
-  --no-fail-on-empty-changeset && \
-  ./run-benchmarks.sh
-```
-
 ## Understanding the Benchmark Results
 
 Both the GPU and CPU benchmarks run identical operations on the same data sizes for direct comparison:
@@ -407,7 +416,7 @@ aws batch describe-jobs --jobs job-id --query "jobs[0].{status:status,statusReas
 
 # Get the log stream and view logs
 LOG_STREAM=$(aws batch describe-jobs --jobs job-id --query "jobs[0].container.logStreamName" --output text)
-aws logs get-log-events --log-group-name /aws/batch/gpu-benchmark --log-stream-name $LOG_STREAM
+aws logs get-log-events --log-group-name /aws/batch/job --log-stream-name "$LOG_STREAM"
 ```
 
 ## Additional Resources
