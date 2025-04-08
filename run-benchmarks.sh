@@ -53,16 +53,9 @@ done
 # Extract results
 echo "Extracting benchmark results..."
 
-# Get job definitions to construct the log stream names
-GPU_JOB_DEF=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$GPU_JOB_ID\") | .jobDefinition" | cut -d "/" -f 2 | cut -d ":" -f 1)
-CPU_JOB_DEF=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$CPU_JOB_ID\") | .jobDefinition" | cut -d "/" -f 2 | cut -d ":" -f 1)
-
-echo "GPU job definition: $GPU_JOB_DEF"
-echo "CPU job definition: $CPU_JOB_DEF"
-
-# Construct the correct log stream names
-GPU_LOG_STREAM="${GPU_JOB_DEF}/default/${GPU_JOB_ID}"
-CPU_LOG_STREAM="${CPU_JOB_DEF}/default/${CPU_JOB_ID}"
+# Get the log stream names directly from the job descriptions
+GPU_LOG_STREAM=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$GPU_JOB_ID\") | .container.logStreamName")
+CPU_LOG_STREAM=$(eval "$DESCRIBE_JOBS_CMD" | jq -r ".jobs[] | select(.jobId == \"$CPU_JOB_ID\") | .container.logStreamName")
 
 echo "GPU log stream: $GPU_LOG_STREAM"
 echo "CPU log stream: $CPU_LOG_STREAM"
@@ -75,8 +68,8 @@ if [ $? -eq 0 ] && [ -s gpu-results.txt ]; then
     cat gpu-results.txt
 else
     echo "Failed to retrieve GPU logs or no matching results found."
-    echo "Listing available log streams for this job:"
-    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "${GPU_JOB_DEF}/default/${GPU_JOB_ID}" --output text
+    echo "Checking if log stream exists:"
+    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "$GPU_LOG_STREAM" --output text
 fi
 
 # Extract CPU results
@@ -87,8 +80,8 @@ if [ $? -eq 0 ] && [ -s cpu-results.txt ]; then
     cat cpu-results.txt
 else
     echo "Failed to retrieve CPU logs or no matching results found."
-    echo "Listing available log streams for this job:"
-    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "${CPU_JOB_DEF}/default/${CPU_JOB_ID}" --output text
+    echo "Checking if log stream exists:"
+    aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "$CPU_LOG_STREAM" --output text
 fi
 
 echo "Results saved to gpu-results.txt and cpu-results.txt"
