@@ -105,12 +105,17 @@ echo "Operation,CPU Time (s),GPU Time (s),Speedup Factor" >> benchmark-summary.t
 
 # Extract matrix multiplication times and calculate speedup
 extract_time() {
-    grep "$1" "$2" | awk '{print $5}' 2>/dev/null || echo "N/A"
+    grep "$1" "$2" | awk '{print $6}' 2>/dev/null || echo "N/A"
 }
 
 calculate_speedup() {
-    if [ "$1" != "N/A" ] && [ "$2" != "N/A" ] && [ "$2" != "0.00" ]; then
-        echo "scale=2; $1 / $2" | bc 2>/dev/null || echo "N/A"
+    if [ "$1" != "N/A" ] && [ "$2" != "N/A" ] && [ "$2" != "0.00" ] && [ "$2" != "0" ]; then
+        # Check if GPU time is very close to zero (less than 0.001)
+        if (( $(echo "$2 < 0.001" | bc -l) )); then
+            echo "Infinite"  # Avoid division by very small numbers
+        else
+            echo "scale=2; $1 / $2" | bc 2>/dev/null || echo "N/A"
+        fi
     else
         echo "N/A"
     fi
@@ -127,16 +132,16 @@ done
 # Image processing comparisons
 for size in 2048 4096; do
     for batch in 1 2; do
-        CPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 cpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $5}' 2>/dev/null || echo "N/A")
-        GPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 gpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $5}' 2>/dev/null || echo "N/A")
+        CPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 cpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $6}' 2>/dev/null || echo "N/A")
+        GPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 gpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $6}' 2>/dev/null || echo "N/A")
         SPEEDUP=$(calculate_speedup "$CPU_TIME" "$GPU_TIME")
         echo "Image ${size}x${size} (batch ${batch}),$CPU_TIME,$GPU_TIME,$SPEEDUP" >> benchmark-summary.txt
     done
 done
 
 # Gaussian Blur comparison
-CPU_BLUR=$(grep "Gaussian Blur:" cpu-benchmark.txt | awk '{print $3}' 2>/dev/null || echo "N/A")
-GPU_BLUR=$(grep "Gaussian Blur:" gpu-benchmark.txt | awk '{print $3}' 2>/dev/null || echo "N/A")
+CPU_BLUR=$(grep "Gaussian Blur:" cpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
+GPU_BLUR=$(grep "Gaussian Blur:" gpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
 BLUR_SPEEDUP=$(calculate_speedup "$CPU_BLUR" "$GPU_BLUR")
 echo "Gaussian Blur,$CPU_BLUR,$GPU_BLUR,$BLUR_SPEEDUP" >> benchmark-summary.txt
 
@@ -192,8 +197,14 @@ MATRIX_8K_GPU=$(extract_time "Matrix multiplication 8000x8000" gpu-benchmark.txt
 if [ "$MATRIX_8K_CPU" != "N/A" ] && [ "$MATRIX_8K_GPU" != "N/A" ]; then
     CPU_COST=$(echo "scale=4; $CPU_RATE * $MATRIX_8K_CPU / 3600" | bc)
     GPU_COST=$(echo "scale=4; $GPU_RATE * $MATRIX_8K_GPU / 3600" | bc)
-    COST_EFFICIENCY=$(echo "scale=2; $CPU_COST / $GPU_COST" | bc)
-    echo "Matrix 8000x8000 Cost Efficiency: $COST_EFFICIENCY (>1 means GPU is more cost-efficient)" >> benchmark-summary.txt
+    
+    # Check if GPU_COST is zero or very close to zero
+    if (( $(echo "$GPU_COST < 0.0001" | bc -l) )); then
+        echo "Matrix 8000x8000 Cost Efficiency: Infinite (GPU is extremely cost-efficient)" >> benchmark-summary.txt
+    else
+        COST_EFFICIENCY=$(echo "scale=2; $CPU_COST / $GPU_COST" | bc)
+        echo "Matrix 8000x8000 Cost Efficiency: $COST_EFFICIENCY (>1 means GPU is more cost-efficient)" >> benchmark-summary.txt
+    fi
 fi
 
 echo "Results saved to gpu-benchmark.txt, cpu-benchmark.txt, and benchmark-summary.txt"
