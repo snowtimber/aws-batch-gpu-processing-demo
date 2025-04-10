@@ -1,21 +1,21 @@
-EVENTS	1744299380974	==========	1744299376094
-EVENTS	1744299380974	==========	1744299376094
-EVENTS	1744299517117	=== CPU BENCHMARK RESULTS ===	1744299516733
-EVENTS	1744299517117	Start Time: 2025-04-10 15:38:26	1744299516733
-EVENTS	1744299517117	=== Instance Information ===	1744299516733
-EVENTS	1744299517117	Instance Type: CPU instance (r5.4xlarge, r5.8xlarge, m5.8xlarge, or c5.18xlarge)	1744299516733
-EVENTS	1744299517117	CPU Count: 32	1744299516733
-EVENTS	1744299517117	===========================	1744299516733
-EVENTS	1744299517117	Matrix multiplication 1000x1000: 0.03 seconds	1744299516733
-EVENTS	1744299517117	Matrix multiplication 5000x5000: 0.52 seconds	1744299516733
-EVENTS	1744299517117	Matrix multiplication 8000x8000: 1.45 seconds	1744299516733
-EVENTS	1744299517117	Matrix multiplication 10000x10000: 2.46 seconds	1744299516733
-EVENTS	1744299517117	Image processing (batch size 1): 0.29 seconds	1744299516733
-EVENTS	1744299517117	Image processing (batch size 2): 0.53 seconds	1744299516733
-EVENTS	1744299517117	Image processing (batch size 1): 1.07 seconds	1744299516733
-EVENTS	1744299517117	Image processing (batch size 2): 2.16 seconds	1744299516733
-EVENTS	1744299517117	=== 3. Gaussian Blur Benchmark ===	1744299516733
-EVENTS	1744299517117	Gaussian Blur: 0.09 seconds	1744299516733
-EVENTS	1744299517117	End Time: 2025-04-10 15:38:36	1744299516733
-EVENTS	1744299517117	Total Job Time: 10.23 seconds	1744299516733
-EVENTS	1744299517117	=== CPU BENCHMARK COMPLETE ===	1744299516733
+1744302032009	========== 
+1744302032009	========== 
+1744302170986	=== CPU BENCHMARK RESULTS === 
+1744302170986	Start Time: 2025-04-10 16:22:40 
+1744302170986	=== Instance Information === 
+1744302170986	Instance Type: CPU instance (r5.4xlarge, r5.8xlarge, m5.8xlarge, or c5.18xlarge) 
+1744302170986	CPU Count: 32 
+1744302170986	=========================== 
+1744302170986	Matrix multiplication 1000x1000: 0.02 seconds 
+1744302170986	Matrix multiplication 5000x5000: 0.50 seconds 
+1744302170986	Matrix multiplication 8000x8000: 1.46 seconds 
+1744302170986	Matrix multiplication 10000x10000: 2.45 seconds 
+1744302170986	Image processing (batch size 1): 0.29 seconds 
+1744302170986	Image processing (batch size 2): 0.54 seconds 
+1744302170986	Image processing (batch size 1): 1.06 seconds 
+1744302170986	Image processing (batch size 2): 2.14 seconds 
+1744302170986	=== 3. Gaussian Blur Benchmark === 
+1744302170986	Gaussian Blur: 0.09 seconds 
+1744302170986	End Time: 2025-04-10 16:22:50 
+1744302170986	Total Job Time: 10.13 seconds 
+1744302170986	=== CPU BENCHMARK COMPLETE === 
