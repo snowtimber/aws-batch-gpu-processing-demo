@@ -1,0 +1,16 @@
+=== Performance Comparison ===
++-------------------------+---------------+---------------+----------------+
+| Operation               | CPU Time (s)  | GPU Time (s)  | Speedup Factor |
++-------------------------+---------------+---------------+----------------+
+| Matrix 1000x1000        | multiplication | multiplication | Infinite       |
+| Matrix 5000x5000        | multiplication | multiplication | Infinite       |
+| Matrix 8000x8000        | multiplication | multiplication | Infinite       |
+| Matrix 10000x10000      | multiplication | multiplication | Infinite       |
+| Image 2048x2048 (batch 1) |               |               | N/A            |
+| Image 2048x2048 (batch 2) |               |               | N/A            |
+| Image 4096x4096 (batch 1) |               |               | N/A            |
+| Image 4096x4096 (batch 2) |               |               | N/A            |
+| Gaussian Blur           | Blur:         | Blur:         | N/A            |
++-------------------------+---------------+---------------+----------------+
+| Total Job Time          | Job           | Job           | N/A            |
++-------------------------+---------------+---------------+----------------+

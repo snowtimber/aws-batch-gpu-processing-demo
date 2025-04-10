@@ -444,19 +444,29 @@ Resources:
             import urllib.request
             
             def benchmark_gpu():
-                print("=== GPU Benchmark for Image Processing ===")
+                # Record start time for total elapsed calculation
+                job_start_time = time.time()
+                
+                print("=== GPU BENCHMARK RESULTS ===")
                 print(f"Start Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # Get basic instance info
                 print("\n=== Instance Information ===")
                 try:
-                    # Get instance type using urllib (standard library)
+                    # Use a more robust approach to get instance type with fallback
                     try:
-                        instance_type = urllib.request.urlopen('http://169.254.169.254/latest/meta-data/instance-type').read().decode('utf-8')
-                    except:
-                        # Fallback to subprocess if urllib fails
-                        instance_type = subprocess.check_output('curl -s http://169.254.169.254/latest/meta-data/instance-type', shell=True).decode('utf-8').strip()
-                    print(f"Instance Type: {instance_type}")
+                        # Try IMDSv2 with token first, then fall back to IMDSv1
+                        instance_type = subprocess.check_output(
+                            'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null) && ' +
+                            'curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || ' +
+                            'curl -s http://169.254.169.254/latest/meta-data/instance-type',
+                            shell=True
+                        ).decode('utf-8').strip()
+                        print(f"Instance Type: {instance_type}")
+                    except Exception as e:
+                        print(f"Error getting instance type: {e}")
+                        # If we can't get the instance type from metadata, use the CloudFormation parameter
+                        print(f"Instance Type: GPU instance (g5.8xlarge, g5.12xlarge, or p3.2xlarge)")
                     
                     # Get CPU count
                     print(f"CPU Count: {os.cpu_count()}")
@@ -467,13 +477,13 @@ Resources:
                         gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                         print(f"GPU Memory: {gpu_memory:.2f} GB")
                 except Exception as e:
-                    print(f"Error getting metadata: {e}")
+                    print(f"Error getting instance information: {e}")
                 print("===========================")
                 
                 if torch.cuda.is_available():
                     # 1. Matrix Operations Benchmark
                     print("\n=== 1. Matrix Operations Benchmark ===")
-                    sizes = [1000, 5000, 8000]  # Small, medium, and large matrices
+                    sizes = [1000, 5000, 8000, 10000]  # Small, medium, and large matrices
                     for size in sizes:
                         torch.cuda.empty_cache()
                         gc.collect()
@@ -550,10 +560,14 @@ Resources:
                     
                     print(f"Gaussian Blur: {blur_time:.2f} seconds")
                     
-                    # Calculate total time
+                    # Calculate total job time
+                    job_end_time = time.time()
+                    total_job_time = job_end_time - job_start_time
+                    
                     print("\n=== Performance Summary ===")
                     print(f"End Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                    print("=== GPU Benchmark Complete ===")
+                    print(f"Total Job Time: {total_job_time:.2f} seconds")
+                    print("=== GPU BENCHMARK COMPLETE ===")
                 else:
                     print("CUDA is not available. Cannot run GPU benchmark.")
             
@@ -608,25 +622,35 @@ Resources:
             import urllib.request
             
             def benchmark_cpu():
-                print("=== CPU Benchmark for Image Processing ===")
+                # Record start time for total elapsed calculation
+                job_start_time = time.time()
+                
+                print("=== CPU BENCHMARK RESULTS ===")
                 print(f"Start Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # Get basic instance info
                 print("\n=== Instance Information ===")
                 try:
-                    # Get instance type using urllib (standard library)
+                    # Use a more robust approach to get instance type with fallback
                     try:
-                        instance_type = urllib.request.urlopen('http://169.254.169.254/latest/meta-data/instance-type').read().decode('utf-8')
-                    except:
-                        # Fallback to subprocess if urllib fails
-                        instance_type = subprocess.check_output('curl -s http://169.254.169.254/latest/meta-data/instance-type', shell=True).decode('utf-8').strip()
-                    print(f"Instance Type: {instance_type}")
+                        # Try IMDSv2 with token first, then fall back to IMDSv1
+                        instance_type = subprocess.check_output(
+                            'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null) && ' +
+                            'curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || ' +
+                            'curl -s http://169.254.169.254/latest/meta-data/instance-type',
+                            shell=True
+                        ).decode('utf-8').strip()
+                        print(f"Instance Type: {instance_type}")
+                    except Exception as e:
+                        print(f"Error getting instance type: {e}")
+                        # If we can't get the instance type from metadata, use the CloudFormation parameter
+                        print(f"Instance Type: CPU instance (r5.4xlarge, r5.8xlarge, m5.8xlarge, or c5.18xlarge)")
                     
                     # Get CPU count
                     print(f"CPU Count: {os.cpu_count()}")
                     print(f"Using CPU with {os.cpu_count()} threads")
                 except Exception as e:
-                    print(f"Error getting metadata: {e}")
+                    print(f"Error getting instance information: {e}")
                 print("===========================")
                 
                 # Force CPU computations
@@ -635,7 +659,7 @@ Resources:
                 
                 # 1. Matrix Operations Benchmark
                 print("\n=== 1. Matrix Operations Benchmark ===")
-                sizes = [1000, 5000, 8000]  # Small, medium, and large matrices
+                sizes = [1000, 5000, 8000, 10000]  # Small, medium, and large matrices
                 for size in sizes:
                     gc.collect()
                     
@@ -709,10 +733,14 @@ Resources:
                 
                 print(f"Gaussian Blur: {blur_time:.2f} seconds")
                 
-                # Calculate total time
+                # Calculate total job time
+                job_end_time = time.time()
+                total_job_time = job_end_time - job_start_time
+                
                 print("\n=== Performance Summary ===")
                 print(f"End Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                print("=== CPU Benchmark Complete ===")
+                print(f"Total Job Time: {total_job_time:.2f} seconds")
+                print("=== CPU BENCHMARK COMPLETE ===")
             
             if __name__ == "__main__":
                 benchmark_cpu()

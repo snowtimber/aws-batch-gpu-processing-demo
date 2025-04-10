@@ -79,7 +79,8 @@ echo "CPU log stream: $CPU_LOG_STREAM"
 # Extract benchmark results and instance information
 echo "Extracting benchmark results and instance information..."
 echo "GPU benchmark:"
-aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$GPU_LOG_STREAM" --output text | grep -E 'Instance Information|multiplication|Image processing|Gaussian Blur|Start Time|End Time|GPU:|CPU Count:|====' > gpu-benchmark.txt
+# Filter out EVENTS lines and timestamps, only keep the actual benchmark data
+aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$GPU_LOG_STREAM" --output text | grep -E 'GPU BENCHMARK|CPU BENCHMARK|Instance Information|Instance Type:|multiplication|Image processing|Gaussian Blur|Start Time|End Time|Total Job Time|GPU:|CPU Count:|====' | sed 's/^EVENTS\s\+[0-9]\+\s\+//' | sed 's/\s\+[0-9]\+$//' > gpu-benchmark.txt
 if [ $? -eq 0 ] && [ -s gpu-benchmark.txt ]; then
     cat gpu-benchmark.txt
 else
@@ -89,7 +90,8 @@ else
 fi
 
 echo "CPU benchmark:"
-aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$CPU_LOG_STREAM" --output text | grep -E 'Instance Information|multiplication|Image processing|Gaussian Blur|Start Time|End Time|CPU Count:|====' > cpu-benchmark.txt
+# Filter out EVENTS lines and timestamps, only keep the actual benchmark data
+aws logs get-log-events --log-group-name "/aws/batch/job" --log-stream-name "$CPU_LOG_STREAM" --output text | grep -E 'GPU BENCHMARK|CPU BENCHMARK|Instance Information|Instance Type:|multiplication|Image processing|Gaussian Blur|Start Time|End Time|Total Job Time|GPU:|CPU Count:|====' | sed 's/^EVENTS\s\+[0-9]\+\s\+//' | sed 's/\s\+[0-9]\+$//' > cpu-benchmark.txt
 if [ $? -eq 0 ] && [ -s cpu-benchmark.txt ]; then
     cat cpu-benchmark.txt
 else
@@ -98,12 +100,14 @@ else
     aws logs describe-log-streams --log-group-name "/aws/batch/job" --log-stream-name-prefix "$CPU_LOG_STREAM" --output text
 fi
 
-# Create performance comparison
+# Create performance comparison with a nice ASCII table
 echo "Creating performance comparison..."
 echo "=== Performance Comparison ===" > benchmark-summary.txt
-echo "Operation,CPU Time (s),GPU Time (s),Speedup Factor" >> benchmark-summary.txt
+echo "+-------------------------+---------------+---------------+----------------+" >> benchmark-summary.txt
+echo "| Operation               | CPU Time (s)  | GPU Time (s)  | Speedup Factor |" >> benchmark-summary.txt
+echo "+-------------------------+---------------+---------------+----------------+" >> benchmark-summary.txt
 
-# Extract matrix multiplication times and calculate speedup
+# Extract times from log files with EVENTS prefix
 extract_time() {
     grep "$1" "$2" | awk '{print $6}' 2>/dev/null || echo "N/A"
 }
@@ -121,91 +125,86 @@ calculate_speedup() {
     fi
 }
 
+# Format table row with proper padding
+format_row() {
+    operation=$1
+    cpu_time=$2
+    gpu_time=$3
+    speedup=$4
+    
+    # Ensure values have consistent formatting
+    if [ "$cpu_time" != "N/A" ] && [[ "$cpu_time" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        cpu_time=$(printf "%.2f" $cpu_time)
+    fi
+    
+    if [ "$gpu_time" != "N/A" ] && [[ "$gpu_time" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        gpu_time=$(printf "%.2f" $gpu_time)
+    fi
+    
+    printf "| %-23s | %-13s | %-13s | %-14s |\n" "$operation" "$cpu_time" "$gpu_time" "$speedup" >> benchmark-summary.txt
+}
+
 # Matrix multiplication comparisons
-for size in 1000 5000 8000; do
-    CPU_TIME=$(extract_time "Matrix multiplication ${size}x${size}" cpu-benchmark.txt)
-    GPU_TIME=$(extract_time "Matrix multiplication ${size}x${size}" gpu-benchmark.txt)
+for size in 1000 5000 8000 10000; do
+    CPU_TIME=$(grep "Matrix multiplication ${size}x${size}:" cpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
+    GPU_TIME=$(grep "Matrix multiplication ${size}x${size}:" gpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
     SPEEDUP=$(calculate_speedup "$CPU_TIME" "$GPU_TIME")
-    echo "Matrix ${size}x${size},$CPU_TIME,$GPU_TIME,$SPEEDUP" >> benchmark-summary.txt
+    format_row "Matrix ${size}x${size}" "$CPU_TIME" "$GPU_TIME" "$SPEEDUP"
 done
 
-# Image processing comparisons
-for size in 2048 4096; do
-    for batch in 1 2; do
-        CPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 cpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $6}' 2>/dev/null || echo "N/A")
-        GPU_TIME=$(grep "Processing images of size ${size}x${size}" -A 3 gpu-benchmark.txt | grep "batch size ${batch}" | awk '{print $6}' 2>/dev/null || echo "N/A")
-        SPEEDUP=$(calculate_speedup "$CPU_TIME" "$GPU_TIME")
-        echo "Image ${size}x${size} (batch ${batch}),$CPU_TIME,$GPU_TIME,$SPEEDUP" >> benchmark-summary.txt
-    done
-done
+# Image processing comparisons - use a more precise approach based on the exact log format
+# First find the lines after "Processing images of size 2048x2048"
+CPU_BATCH1_2048=$(grep -A 2 "Processing images of size 2048x2048" cpu-benchmark.txt | grep "batch size 1" | awk '{print $4}' 2>/dev/null || echo "N/A")
+CPU_BATCH2_2048=$(grep -A 3 "Processing images of size 2048x2048" cpu-benchmark.txt | grep "batch size 2" | awk '{print $4}' 2>/dev/null || echo "N/A")
 
-# Gaussian Blur comparison
+# Then find the lines after "Processing images of size 4096x4096"
+CPU_BATCH1_4096=$(grep -A 2 "Processing images of size 4096x4096" cpu-benchmark.txt | grep "batch size 1" | awk '{print $4}' 2>/dev/null || echo "N/A")
+CPU_BATCH2_4096=$(grep -A 3 "Processing images of size 4096x4096" cpu-benchmark.txt | grep "batch size 2" | awk '{print $4}' 2>/dev/null || echo "N/A")
+
+# Same for GPU
+GPU_BATCH1_2048=$(grep -A 2 "Processing images of size 2048x2048" gpu-benchmark.txt | grep "batch size 1" | awk '{print $4}' 2>/dev/null || echo "N/A")
+GPU_BATCH2_2048=$(grep -A 3 "Processing images of size 2048x2048" gpu-benchmark.txt | grep "batch size 2" | awk '{print $4}' 2>/dev/null || echo "N/A")
+GPU_BATCH1_4096=$(grep -A 2 "Processing images of size 4096x4096" gpu-benchmark.txt | grep "batch size 1" | awk '{print $4}' 2>/dev/null || echo "N/A")
+GPU_BATCH2_4096=$(grep -A 3 "Processing images of size 4096x4096" gpu-benchmark.txt | grep "batch size 2" | awk '{print $4}' 2>/dev/null || echo "N/A")
+
+# Calculate speedups
+SPEEDUP_2048_1=$(calculate_speedup "$CPU_BATCH1_2048" "$GPU_BATCH1_2048")
+SPEEDUP_2048_2=$(calculate_speedup "$CPU_BATCH2_2048" "$GPU_BATCH2_2048")
+SPEEDUP_4096_1=$(calculate_speedup "$CPU_BATCH1_4096" "$GPU_BATCH1_4096")
+SPEEDUP_4096_2=$(calculate_speedup "$CPU_BATCH2_4096" "$GPU_BATCH2_4096")
+
+# Format rows
+format_row "Image 2048x2048 (batch 1)" "$CPU_BATCH1_2048" "$GPU_BATCH1_2048" "$SPEEDUP_2048_1"
+format_row "Image 2048x2048 (batch 2)" "$CPU_BATCH2_2048" "$GPU_BATCH2_2048" "$SPEEDUP_2048_2"
+format_row "Image 4096x4096 (batch 1)" "$CPU_BATCH1_4096" "$GPU_BATCH1_4096" "$SPEEDUP_4096_1"
+format_row "Image 4096x4096 (batch 2)" "$CPU_BATCH2_4096" "$GPU_BATCH2_4096" "$SPEEDUP_4096_2"
+
+# Gaussian Blur comparison - use a more precise approach
 CPU_BLUR=$(grep "Gaussian Blur:" cpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
 GPU_BLUR=$(grep "Gaussian Blur:" gpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
+
 BLUR_SPEEDUP=$(calculate_speedup "$CPU_BLUR" "$GPU_BLUR")
-echo "Gaussian Blur,$CPU_BLUR,$GPU_BLUR,$BLUR_SPEEDUP" >> benchmark-summary.txt
+format_row "Gaussian Blur" "$CPU_BLUR" "$GPU_BLUR" "$BLUR_SPEEDUP"
 
-# Calculate total benchmark time including provisioning
-END_TIME=$(date +%s)
-TOTAL_SECONDS=$((END_TIME - START_TIME))
-MINUTES=$((TOTAL_SECONDS / 60))
-SECONDS=$((TOTAL_SECONDS % 60))
+# Extract the total job times
+GPU_JOB_TIME=$(grep "Total Job Time:" gpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
+CPU_JOB_TIME=$(grep "Total Job Time:" cpu-benchmark.txt | awk '{print $4}' 2>/dev/null || echo "N/A")
 
-echo "" >> benchmark-summary.txt
-echo "=== Total Benchmark Time (including provisioning) ===" >> benchmark-summary.txt
-echo "Start time: $(convert_timestamp $START_TIME)" >> benchmark-summary.txt
-echo "End time: $(convert_timestamp $END_TIME)" >> benchmark-summary.txt
-echo "Total time: ${MINUTES}m ${SECONDS}s" >> benchmark-summary.txt
-
-# Extract instance information
-echo "" >> benchmark-summary.txt
-echo "=== Instance Information ===" >> benchmark-summary.txt
-echo "GPU Instance:" >> benchmark-summary.txt
-grep -A 10 "Instance Information" gpu-benchmark.txt >> benchmark-summary.txt
-echo "" >> benchmark-summary.txt
-echo "CPU Instance:" >> benchmark-summary.txt
-grep -A 10 "Instance Information" cpu-benchmark.txt >> benchmark-summary.txt
-
-# Calculate cost comparison (estimated)
-echo "" >> benchmark-summary.txt
-echo "=== Cost Efficiency Analysis (Estimated) ===" >> benchmark-summary.txt
-GPU_INSTANCE=$(grep "Instance Type:" gpu-benchmark.txt | grep -o 'g[0-9]\.[0-9a-z]*\|p[0-9]\.[0-9a-z]*' || echo "Unknown")
-CPU_INSTANCE=$(grep "Instance Type:" cpu-benchmark.txt | grep -o '[rc][0-9]\.[0-9a-z]*\|m[0-9]\.[0-9a-z]*' || echo "Unknown")
-
-# Estimated hourly rates (you can adjust these based on actual pricing)
-case "$GPU_INSTANCE" in
-    "g5.8xlarge") GPU_RATE=2.88 ;;
-    "g5.12xlarge") GPU_RATE=4.32 ;;
-    "p3.2xlarge") GPU_RATE=3.06 ;;
-    *) GPU_RATE=3.00 ;; # Default estimate
-esac
-
-case "$CPU_INSTANCE" in
-    "r5.4xlarge") CPU_RATE=1.01 ;;
-    "r5.8xlarge") CPU_RATE=2.02 ;;
-    "m5.8xlarge") CPU_RATE=1.54 ;;
-    "c5.18xlarge") CPU_RATE=3.06 ;;
-    *) CPU_RATE=2.00 ;; # Default estimate
-esac
-
-echo "GPU Instance: $GPU_INSTANCE (Est. $GPU_RATE/hour)" >> benchmark-summary.txt
-echo "CPU Instance: $CPU_INSTANCE (Est. $CPU_RATE/hour)" >> benchmark-summary.txt
-
-# Calculate cost efficiency for matrix multiplication 8000x8000
-MATRIX_8K_CPU=$(extract_time "Matrix multiplication 8000x8000" cpu-benchmark.txt)
-MATRIX_8K_GPU=$(extract_time "Matrix multiplication 8000x8000" gpu-benchmark.txt)
-if [ "$MATRIX_8K_CPU" != "N/A" ] && [ "$MATRIX_8K_GPU" != "N/A" ]; then
-    CPU_COST=$(echo "scale=4; $CPU_RATE * $MATRIX_8K_CPU / 3600" | bc)
-    GPU_COST=$(echo "scale=4; $GPU_RATE * $MATRIX_8K_GPU / 3600" | bc)
-    
-    # Check if GPU_COST is zero or very close to zero
-    if (( $(echo "$GPU_COST < 0.0001" | bc -l) )); then
-        echo "Matrix 8000x8000 Cost Efficiency: Infinite (GPU is extremely cost-efficient)" >> benchmark-summary.txt
-    else
-        COST_EFFICIENCY=$(echo "scale=2; $CPU_COST / $GPU_COST" | bc)
-        echo "Matrix 8000x8000 Cost Efficiency: $COST_EFFICIENCY (>1 means GPU is more cost-efficient)" >> benchmark-summary.txt
-    fi
+# Calculate speedup for total job time
+if [[ "$GPU_JOB_TIME" != "N/A" && "$CPU_JOB_TIME" != "N/A" ]]; then
+    JOB_SPEEDUP=$(echo "scale=2; $CPU_JOB_TIME / $GPU_JOB_TIME" | bc 2>/dev/null || echo "N/A")
+else
+    JOB_SPEEDUP="N/A"
 fi
+
+# Add a separator line in the table
+echo "+-------------------------+---------------+---------------+----------------+" >> benchmark-summary.txt
+
+# Add total job times to the main table
+format_row "Total Job Time" "$CPU_JOB_TIME" "$GPU_JOB_TIME" "$JOB_SPEEDUP"
+
+# Add table footer
+echo "+-------------------------+---------------+---------------+----------------+" >> benchmark-summary.txt
 
 echo "Results saved to gpu-benchmark.txt, cpu-benchmark.txt, and benchmark-summary.txt"
 echo "=== Benchmark Complete ==="
