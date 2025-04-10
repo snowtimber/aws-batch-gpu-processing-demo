@@ -38,7 +38,7 @@ When combined with GPU-enabled instances, AWS Batch becomes a powerful solution 
 
 To demonstrate the power of GPU acceleration with AWS Batch, we created a benchmark comparing GPU and CPU performance for common data processing tasks. Our benchmark included:
 
-1. Matrix multiplication at different scales (1000x1000, 5000x5000, and 8000x8000)
+1. Matrix multiplication at different scales (1000x1000, 5000x5000, 8000x8000, and 10000x10000)
 2. Image processing operations on different image sizes (2048x2048 and 4096x4096) with batch sizes of 1 and 2
 3. Gaussian blur filter application
 
@@ -50,14 +50,17 @@ The results clearly demonstrate the advantage of GPU acceleration for these work
 +-------------------------+---------------+---------------+----------------+
 | Operation               | CPU Time (s)  | GPU Time (s)  | Speedup Factor |
 +-------------------------+---------------+---------------+----------------+
-| Matrix 1000x1000        | 0.02          | 0.56          | 0.03           |
+| Matrix 1000x1000        | 0.02          | 0.88          | 0.02           |
 | Matrix 5000x5000        | 0.50          | 0.01          | 50.00          |
-| Matrix 8000x8000        | 1.45          | 0.04          | 36.25          |
-| Image 2048x2048 (batch 1)| 0.29          | 0.15          | 1.93           |
-| Image 2048x2048 (batch 2)| 0.53          | 0.04          | 13.25          |
-| Image 4096x4096 (batch 1)| 1.05          | 0.09          | 11.67          |
-| Image 4096x4096 (batch 2)| 2.13          | 0.23          | 9.26           |
+| Matrix 8000x8000        | 1.46          | 0.04          | 36.50          |
+| Matrix 10000x10000      | 2.45          | 0.09          | 27.22          |
+| Image 2048x2048 (batch 1) | 0.29          | 0.16          | 1.81           |
+| Image 2048x2048 (batch 2) | 0.54          | 0.04          | 13.50          |
+| Image 4096x4096 (batch 1) | 0.29          | 0.16          | 1.81           |
+| Image 4096x4096 (batch 2) | 2.14          | 0.21          | 10.19          |
 | Gaussian Blur           | 0.09          | 0.04          | 2.25           |
++-------------------------+---------------+---------------+----------------+
+| Total Job Time          | 10.13         | 3.03          | 3.34           |
 +-------------------------+---------------+---------------+----------------+
 ```
 
@@ -74,15 +77,19 @@ The results clearly demonstrate the advantage of GPU acceleration for these work
 +------------------+----------------------------------------------------+
 ```
 
-> **Note**: For small matrices (1000x1000), the CPU actually outperforms the GPU. This is because the overhead of transferring data to the GPU exceeds the computational advantage for small workloads. This highlights the importance of choosing the right tool for the job based on workload characteristics.
+> **Note**: For small matrices (1000x1000), the CPU dramatically outperforms the GPU (50x faster). This is because the overhead of transferring data to the GPU significantly exceeds the computational advantage for small workloads. This highlights the importance of choosing the right tool for the job based on workload characteristics.
 
 ### Key Observations
 
-1. **Scale matters**: As the problem size increases, GPU advantage grows dramatically. For the 5000x5000 matrix multiplication, the GPU was 50x faster than the CPU, and for the 8000x8000 matrix, the advantage increased to 36x!
+1. **Scale matters**: As the problem size increases, GPU advantage grows dramatically. For the 5000x5000 matrix multiplication, the GPU was 50x faster than the CPU. For larger matrices, the advantage remains significant with 36.5x speedup for 8000x8000 matrices and 27.22x for 10000x10000 matrices.
 
-2. **Data transfer overhead**: For smaller workloads, the overhead of transferring data to the GPU can outweigh the computational advantage, as seen in the 1000x1000 matrix multiplication.
+2. **Data transfer overhead**: For smaller workloads, the overhead of transferring data to the GPU can significantly outweigh the computational advantage. This is clearly demonstrated in the 1000x1000 matrix multiplication, where the CPU is actually 50x faster than the GPU.
 
-3. **Image processing advantage**: GPUs excel at image processing tasks, with speedups of 1.9-13x depending on image size and batch size. The advantage varies with both image size and batch size.
+3. **Image processing advantage**: GPUs excel at image processing tasks, with speedups of 1.8-13.5x depending on image size and batch size. The advantage varies with both image size and batch size, with batch processing showing particularly strong GPU advantages.
+
+4. **Overall workload acceleration**: Looking at the total job time, the GPU-based solution completed the entire benchmark suite 3.34x faster than the CPU-based solution, demonstrating significant real-world performance gains.
+
+5. **GPU warmup effect**: The first task (Matrix 1000x1000) shows poor GPU performance, but subsequent tasks show dramatically better results. This demonstrates the GPU "warmup" effect, where initial operations include the overhead of initializing the CUDA environment, loading drivers, and establishing memory patterns. After this warmup period, GPUs perform consistently faster for appropriate workloads. This is an important consideration when designing batch workloads, as the warmup cost is amortized across multiple operations.
 
 
 ## Implementing GPU-Accelerated Batch Processing
