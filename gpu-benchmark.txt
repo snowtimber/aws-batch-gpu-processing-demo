@@ -1,24 +1,24 @@
-1744302045245	========== 
-1744302045245	========== 
-1744302045268	|=========================================+========================+======================| 
-1744302045288	|=========================================================================================| 
-1744302160470	=== GPU BENCHMARK RESULTS === 
-1744302160470	Start Time: 2025-04-10 16:22:37 
-1744302160470	=== Instance Information === 
-1744302160470	Instance Type: GPU instance (g5.8xlarge, g5.12xlarge, or p3.2xlarge) 
-1744302160470	CPU Count: 32 
-1744302160470	GPU: NVIDIA A10G 
-1744302160470	=========================== 
-1744302160470	Matrix multiplication 1000x1000: 0.88 seconds 
-1744302160470	Matrix multiplication 5000x5000: 0.01 seconds 
-1744302160470	Matrix multiplication 8000x8000: 0.04 seconds 
-1744302160470	Matrix multiplication 10000x10000: 0.09 seconds 
-1744302160470	Image processing (batch size 1): 0.16 seconds 
-1744302160470	Image processing (batch size 2): 0.04 seconds 
-1744302160470	Image processing (batch size 1): 0.09 seconds 
-1744302160470	Image processing (batch size 2): 0.21 seconds 
-1744302160470	=== 3. Gaussian Blur Benchmark === 
-1744302160470	Gaussian Blur: 0.04 seconds 
-1744302160470	End Time: 2025-04-10 16:22:40 
-1744302160470	Total Job Time: 3.03 seconds 
-1744302160470	=== GPU BENCHMARK COMPLETE === 
+1744389353738	========== 
+1744389353738	========== 
+1744389353761	|=========================================+========================+======================| 
+1744389353780	|=========================================================================================| 
+1744389466631	=== GPU BENCHMARK RESULTS === 
+1744389466631	Start Time: 2025-04-11 16:37:44 
+1744389466631	=== Instance Information === 
+1744389466631	Instance Type: GPU instance (g5.8xlarge, g5.12xlarge, or p3.2xlarge) 
+1744389466631	CPU Count: 32 
+1744389466631	GPU: NVIDIA A10G 
+1744389466631	=========================== 
+1744389466631	Matrix multiplication 1000x1000: 0.34 seconds 
+1744389466631	Matrix multiplication 5000x5000: 0.01 seconds 
+1744389466631	Matrix multiplication 8000x8000: 0.04 seconds 
+1744389466631	Matrix multiplication 10000x10000: 0.09 seconds 
+1744389466631	Image processing (batch size 1): 0.15 seconds 
+1744389466631	Image processing (batch size 2): 0.04 seconds 
+1744389466631	Image processing (batch size 1): 0.09 seconds 
+1744389466631	Image processing (batch size 2): 0.22 seconds 
+1744389466631	=== 3. Gaussian Blur Benchmark === 
+1744389466631	Gaussian Blur: 0.04 seconds 
+1744389466631	End Time: 2025-04-11 16:37:46 
+1744389466631	Total Job Time: 1.89 seconds 
+1744389466631	=== GPU BENCHMARK COMPLETE === 

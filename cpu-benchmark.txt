@@ -1,21 +1,21 @@
-1744302032009	========== 
-1744302032009	========== 
-1744302170986	=== CPU BENCHMARK RESULTS === 
-1744302170986	Start Time: 2025-04-10 16:22:40 
-1744302170986	=== Instance Information === 
-1744302170986	Instance Type: CPU instance (r5.4xlarge, r5.8xlarge, m5.8xlarge, or c5.18xlarge) 
-1744302170986	CPU Count: 32 
-1744302170986	=========================== 
-1744302170986	Matrix multiplication 1000x1000: 0.02 seconds 
-1744302170986	Matrix multiplication 5000x5000: 0.50 seconds 
-1744302170986	Matrix multiplication 8000x8000: 1.46 seconds 
-1744302170986	Matrix multiplication 10000x10000: 2.45 seconds 
-1744302170986	Image processing (batch size 1): 0.29 seconds 
-1744302170986	Image processing (batch size 2): 0.54 seconds 
-1744302170986	Image processing (batch size 1): 1.06 seconds 
-1744302170986	Image processing (batch size 2): 2.14 seconds 
-1744302170986	=== 3. Gaussian Blur Benchmark === 
-1744302170986	Gaussian Blur: 0.09 seconds 
-1744302170986	End Time: 2025-04-10 16:22:50 
-1744302170986	Total Job Time: 10.13 seconds 
-1744302170986	=== CPU BENCHMARK COMPLETE === 
+1744389356089	========== 
+1744389356089	========== 
+1744389494583	=== CPU BENCHMARK RESULTS === 
+1744389494583	Start Time: 2025-04-11 16:38:04 
+1744389494583	=== Instance Information === 
+1744389494583	Instance Type: CPU instance (r5.4xlarge, r5.8xlarge, m5.8xlarge, or c5.18xlarge) 
+1744389494583	CPU Count: 32 
+1744389494583	=========================== 
+1744389494583	Matrix multiplication 1000x1000: 0.03 seconds 
+1744389494583	Matrix multiplication 5000x5000: 0.51 seconds 
+1744389494583	Matrix multiplication 8000x8000: 1.46 seconds 
+1744389494583	Matrix multiplication 10000x10000: 2.45 seconds 
+1744389494583	Image processing (batch size 1): 0.28 seconds 
+1744389494583	Image processing (batch size 2): 0.52 seconds 
+1744389494583	Image processing (batch size 1): 1.08 seconds 
+1744389494583	Image processing (batch size 2): 2.10 seconds 
+1744389494583	=== 3. Gaussian Blur Benchmark === 
+1744389494583	Gaussian Blur: 0.09 seconds 
+1744389494583	End Time: 2025-04-11 16:38:14 
+1744389494583	Total Job Time: 10.05 seconds 
+1744389494583	=== CPU BENCHMARK COMPLETE === 
