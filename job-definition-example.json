@@ -1,0 +1,54 @@
+{
+  "jobDefinitionName": "gpu-image-processing-benchmark",
+  "type": "container",
+  "containerProperties": {
+    "image": "nvidia/cuda:11.6.2-base-ubuntu20.04",
+    "vcpus": 8,
+    "memory": 16384,
+    "command": [
+      "python",
+      "benchmark.py",
+      "--model",
+      "resnet50",
+      "--batch-size",
+      "32"
+    ],
+    "environment": [
+      {
+        "name": "DATASET",
+        "value": "imagenet"
+      },
+      {
+        "name": "OUTPUT_DIR",
+        "value": "/output"
+      }
+    ],
+    "resourceRequirements": [
+      {
+        "type": "GPU",
+        "value": "1"
+      }
+    ],
+    "volumes": [
+      {
+        "name": "data",
+        "host": {
+          "sourcePath": "/data"
+        }
+      }
+    ],
+    "mountPoints": [
+      {
+        "containerPath": "/data",
+        "sourceVolume": "data",
+        "readOnly": true
+      }
+    ]
+  },
+  "timeout": {
+    "attemptDurationSeconds": 3600
+  },
+  "retryStrategy": {
+    "attempts": 2
+  }
+}

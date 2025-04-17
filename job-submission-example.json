@@ -1,0 +1,114 @@
+{
+  "jobs": [
+    {
+      "jobDefinition": "gpu-image-processing-benchmark",
+      "jobQueue": "GpuJobQueue",
+      "jobName": "gpu-benchmark-resnet50",
+      "containerOverrides": {
+        "command": [
+          "python",
+          "benchmark.py",
+          "--model",
+          "resnet50",
+          "--batch-size",
+          "32"
+        ],
+        "environment": [
+          {
+            "name": "MODEL_TYPE",
+            "value": "resnet50"
+          },
+          {
+            "name": "BATCH_SIZE",
+            "value": "32"
+          }
+        ],
+        "resourceRequirements": [
+          {
+            "type": "GPU",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "jobDefinition": "gpu-image-processing-benchmark",
+      "jobQueue": "GpuJobQueue",
+      "jobName": "gpu-benchmark-efficientnet",
+      "containerOverrides": {
+        "command": [
+          "python",
+          "benchmark.py",
+          "--model",
+          "efficientnet",
+          "--batch-size",
+          "16"
+        ],
+        "environment": [
+          {
+            "name": "MODEL_TYPE",
+            "value": "efficientnet"
+          },
+          {
+            "name": "BATCH_SIZE",
+            "value": "16"
+          }
+        ],
+        "resourceRequirements": [
+          {
+            "type": "GPU",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "jobDefinition": "cpu-image-processing-benchmark",
+      "jobQueue": "CpuJobQueue",
+      "jobName": "cpu-benchmark-mobilenet",
+      "containerOverrides": {
+        "command": [
+          "python",
+          "benchmark.py",
+          "--model",
+          "mobilenet",
+          "--batch-size",
+          "64"
+        ],
+        "environment": [
+          {
+            "name": "MODEL_TYPE",
+            "value": "mobilenet"
+          },
+          {
+            "name": "BATCH_SIZE",
+            "value": "64"
+          }
+        ]
+      }
+    },
+    {
+      "jobDefinition": "gpu-image-processing-benchmark",
+      "jobQueue": "GpuJobQueue",
+      "jobName": "gpu-benchmark-dependent",
+      "containerOverrides": {
+        "command": [
+          "python",
+          "benchmark.py",
+          "--model",
+          "resnet50",
+          "--batch-size",
+          "32",
+          "--use-results-from",
+          "previous-job"
+        ]
+      },
+      "dependsOn": [
+        {
+          "jobId": "${gpu-benchmark-resnet50}",
+          "type": "SEQUENTIAL"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "jobDefinition": "gpu-image-processing-benchmark",
+  "jobQueue": "GpuJobQueue",
+  "jobName": "single-gpu-benchmark",
+  "containerOverrides": {
+    "command": [
+      "python",
+      "benchmark.py",
+      "--model",
+      "resnet50",
+      "--batch-size",
+      "32"
+    ],
+    "environment": [
+      {
+        "name": "MODEL_TYPE",
+        "value": "resnet50"
+      },
+      {
+        "name": "BATCH_SIZE",
+        "value": "32"
+      },
+      {
+        "name": "DEBUG",
+        "value": "true"
+      }
+    ],
+    "resourceRequirements": [
+      {
+        "type": "GPU",
+        "value": "1"
+      }
+    ]
+  },
+  "timeout": {
+    "attemptDurationSeconds": 1800
+  }
+}
