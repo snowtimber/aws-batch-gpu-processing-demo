@@ -149,7 +149,9 @@ EOF
 aws batch create-compute-environment --cli-input-json file://spot-compute-env.json
 ```
 
-#### d. Unmanaged Compute Environment (For Custom ECS Clusters)
+#### d. Unmanaged Compute Environment (For Self-Provisioned EC2 Instances or Auto Scaling Groups)
+
+Unmanaged compute environments allow you to use your own EC2 instances or Auto Scaling Groups with AWS Batch, giving you complete control over the infrastructure.
 
 ```bash
 # Create a JSON configuration file for an unmanaged compute environment
@@ -158,13 +160,52 @@ cat > unmanaged-compute-env.json << EOF
   "computeEnvironmentName": "unmanaged-compute-environment",
   "type": "UNMANAGED",
   "state": "ENABLED",
-  "serviceRole": "AWSBatchServiceRole"
+  "serviceRole": "AWSBatchServiceRole",
+  "tags": {
+    "Name": "Self-Managed Batch Environment",
+    "Purpose": "Custom GPU Processing",
+    "ManagedBy": "Infrastructure Team"
+  }
 }
 EOF
 
 # Create the compute environment
 aws batch create-compute-environment --cli-input-json file://unmanaged-compute-env.json
+
+# Get the ECS cluster name created by AWS Batch (needed for instance configuration)
+ECS_CLUSTER_NAME=$(aws batch describe-compute-environments \
+  --compute-environments unmanaged-compute-environment \
+  --query "computeEnvironments[0].ecsClusterArn" \
+  --output text | cut -d'/' -f2)
+
+echo "ECS Cluster Name for instance configuration: $ECS_CLUSTER_NAME"
 ```
+
+**How Unmanaged Compute Environments Work:**
+
+When you create an unmanaged compute environment, AWS Batch:
+1. Creates an Amazon ECS cluster with the same name as your compute environment
+2. Does NOT provision or manage any EC2 instances
+3. Expects you to provide and manage the instances yourself
+
+To connect your self-provisioned EC2 instances or Auto Scaling Group to this environment:
+
+1. Install the Amazon ECS container agent on your instances
+2. Configure the agent to register with the ECS cluster created by AWS Batch
+3. Set the following in `/etc/ecs/ecs.config` on your instances:
+   ```
+   ECS_CLUSTER=your-batch-created-cluster-name
+   ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+   ECS_ENABLE_TASK_IAM_ROLE=true
+   ```
+4. For GPU instances, also add: `ECS_ENABLE_GPU_SUPPORT=true`
+
+Your instances must have:
+- IAM role with permissions for ECS and any resources your jobs need
+- Proper networking configuration to communicate with AWS services
+- Docker installed and configured
+
+AWS Batch will then schedule jobs on your instances based on the resources they report to ECS.
 
 ### 2. Creating Scheduling Policies
 
