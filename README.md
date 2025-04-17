@@ -97,7 +97,12 @@ aws cloudformation delete-stack --stack-name gpu-benchmark
 
 ## Enterprise Usage
 
-For information on how to use AWS Batch in an enterprise environment, including how developers can submit jobs to centralized compute environments using JSON files, see the [Enterprise Usage Guide](enterprise-batch/ENTERPRISE-USAGE.md).
+For information on how to use AWS Batch in an enterprise environment, including how developers can submit jobs to centralized compute environments using JSON files, we provide two approaches:
+
+1. **Shell Script Approach**: [Enterprise Usage Guide](enterprise-batch/ENTERPRISE-USAGE.md) - Uses shell scripts to simplify job definition and submission
+2. **Pure CLI Approach**: [CLI Usage Guide](enterprise-batch/CLI-USAGE.md) - Uses AWS CLI commands directly with JSON files, without any custom scripts
+
+Both approaches demonstrate how to enable developers across an organization to submit workloads to centralized AWS Batch compute environments.
 
 ## AWS Batch GPU Processing Guide
 
