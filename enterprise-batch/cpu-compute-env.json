@@ -1,0 +1,29 @@
+{
+  "computeEnvironmentName": "cpu-compute-environment",
+  "type": "MANAGED",
+  "state": "ENABLED",
+  "computeResources": {
+    "type": "EC2",
+    "allocationStrategy": "BEST_FIT_PROGRESSIVE",
+    "minvCpus": 0,
+    "maxvCpus": 256,
+    "desiredvCpus": 0,
+    "instanceTypes": [
+      "c5", "m5", "r5"
+    ],
+    "subnets": [
+      "subnet-12345678",
+      "subnet-23456789",
+      "subnet-34567890"
+    ],
+    "securityGroupIds": [
+      "sg-12345678"
+    ],
+    "instanceRole": "ecsInstanceRole",
+    "tags": {
+      "Name": "AWS Batch CPU Instance",
+      "Environment": "Production"
+    }
+  },
+  "serviceRole": "AWSBatchServiceRole"
+}

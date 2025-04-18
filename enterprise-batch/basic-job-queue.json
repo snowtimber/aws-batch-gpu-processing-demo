@@ -1,0 +1,15 @@
+{
+  "jobQueueName": "standard-job-queue",
+  "state": "ENABLED",
+  "priority": 10,
+  "computeEnvironmentOrder": [
+    {
+      "order": 1,
+      "computeEnvironment": "cpu-compute-environment"
+    },
+    {
+      "order": 2,
+      "computeEnvironment": "spot-compute-environment"
+    }
+  ]
+}

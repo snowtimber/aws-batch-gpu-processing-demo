@@ -1,0 +1,25 @@
+{
+  "name": "enterprise-fair-share",
+  "fairsharePolicy": {
+    "shareDecaySeconds": 3600,
+    "computeReservation": 5,
+    "shareDistribution": [
+      {
+        "shareIdentifier": "research-team",
+        "weightFactor": 3.0
+      },
+      {
+        "shareIdentifier": "engineering-team",
+        "weightFactor": 2.0
+      },
+      {
+        "shareIdentifier": "data-science-team",
+        "weightFactor": 3.0
+      },
+      {
+        "shareIdentifier": "default",
+        "weightFactor": 1.0
+      }
+    ]
+  }
+}

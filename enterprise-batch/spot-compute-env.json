@@ -1,0 +1,31 @@
+{
+  "computeEnvironmentName": "spot-compute-environment",
+  "type": "MANAGED",
+  "state": "ENABLED",
+  "computeResources": {
+    "type": "SPOT",
+    "allocationStrategy": "SPOT_CAPACITY_OPTIMIZED",
+    "minvCpus": 0,
+    "maxvCpus": 512,
+    "desiredvCpus": 0,
+    "instanceTypes": [
+      "optimal"
+    ],
+    "bidPercentage": 70,
+    "spotIamFleetRole": "arn:aws:iam::123456789012:role/AmazonEC2SpotFleetRole",
+    "subnets": [
+      "subnet-12345678",
+      "subnet-23456789",
+      "subnet-34567890"
+    ],
+    "securityGroupIds": [
+      "sg-12345678"
+    ],
+    "instanceRole": "ecsInstanceRole",
+    "tags": {
+      "Name": "AWS Batch Spot Instance",
+      "Environment": "Production"
+    }
+  },
+  "serviceRole": "AWSBatchServiceRole"
+}
